@@ -32,13 +32,19 @@ enum APIKeyStoreError: Error, LocalizedError {
 enum APIKeyStore {
     private static let service = "com.schtack.BuybackCalculator.apiKeys"
     private static let sharedAccessGroupIdentifier = "com.schtack.BuybackCalculator.apiKeys"
+    private static let fallbackStoragePrefix = "buybackCalculator.apiKeys."
 
     static func string(for kind: APIKeyKind) throws -> String? {
+        if let fallbackValue = fallbackString(for: kind) {
+            return fallbackValue
+        }
+
         var firstError: Error?
 
         if let accessGroup = sharedAccessGroup {
             do {
                 if let value = try string(for: kind, accessGroup: accessGroup) {
+                    setFallbackString(value, for: kind)
                     return value
                 }
             } catch {
@@ -47,7 +53,11 @@ enum APIKeyStore {
         }
 
         do {
-            return try string(for: kind, accessGroup: nil)
+            let value = try string(for: kind, accessGroup: nil)
+            if let value {
+                setFallbackString(value, for: kind)
+            }
+            return value
         } catch {
             throw firstError ?? error
         }
@@ -59,6 +69,8 @@ enum APIKeyStore {
             try delete(kind)
             return
         }
+
+        setFallbackString(trimmed, for: kind)
 
         var firstError: Error?
 
@@ -75,11 +87,15 @@ enum APIKeyStore {
         do {
             try set(trimmed, for: kind, accessGroup: nil)
         } catch {
-            throw firstError ?? error
+            if fallbackString(for: kind) == nil {
+                throw firstError ?? error
+            }
         }
     }
 
     static func delete(_ kind: APIKeyKind) throws {
+        deleteFallbackString(for: kind)
+
         var firstError: Error?
         var deletedOrMissing = false
 
@@ -165,6 +181,27 @@ enum APIKeyStore {
         }
 
         return query
+    }
+
+    private static func fallbackString(for kind: APIKeyKind) -> String? {
+        let value = BuybackSharedStorage.userDefaults.string(forKey: fallbackStorageKey(for: kind))
+        return MarketDataClientFactory.sanitizedAPIKey(value)
+    }
+
+    private static func setFallbackString(_ value: String, for kind: APIKeyKind) {
+        let userDefaults = BuybackSharedStorage.userDefaults
+        userDefaults.set(value, forKey: fallbackStorageKey(for: kind))
+        userDefaults.synchronize()
+    }
+
+    private static func deleteFallbackString(for kind: APIKeyKind) {
+        let userDefaults = BuybackSharedStorage.userDefaults
+        userDefaults.removeObject(forKey: fallbackStorageKey(for: kind))
+        userDefaults.synchronize()
+    }
+
+    private static func fallbackStorageKey(for kind: APIKeyKind) -> String {
+        fallbackStoragePrefix + kind.rawValue
     }
 
     private static var sharedAccessGroup: String? {

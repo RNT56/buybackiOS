@@ -626,6 +626,7 @@ struct ContentView: View {
                             apiKeys.save()
                             configureLookupClient()
                             lookup.scheduleSearch(query: assetQuery)
+                            WidgetCenter.shared.reloadAllTimelines()
                         } label: {
                             LiquidGlassActionIcon(icon: .save, size: 44)
                                 .frame(maxWidth: .infinity)
@@ -637,6 +638,7 @@ struct ContentView: View {
                             apiKeys.clear()
                             configureLookupClient()
                             lookup.scheduleSearch(query: assetQuery)
+                            WidgetCenter.shared.reloadAllTimelines()
                         } label: {
                             LiquidGlassActionIcon(icon: .clear, tint: .red, size: 44)
                                 .frame(maxWidth: .infinity)

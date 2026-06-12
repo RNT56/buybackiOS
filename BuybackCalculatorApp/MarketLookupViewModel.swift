@@ -10,7 +10,7 @@ final class MarketLookupViewModel: ObservableObject {
     @Published var isSearching = false
     @Published var isFetchingQuote = false
 
-    private var client = MarketDataClientFactory.make(includeSavedKeys: false)
+    private var client = MarketDataClientFactory.make(includeSavedKeys: true)
     private var searchCache: [String: CachedSearch] = [:]
     private var quoteCache: [String: CachedQuote] = [:]
     private var searchTask: Task<Void, Never>?
@@ -20,7 +20,7 @@ final class MarketLookupViewModel: ObservableObject {
         client = MarketDataClientFactory.make(
             finnhubAPIKey: finnhubAPIKey,
             openFIGIAPIKey: openFIGIAPIKey,
-            includeSavedKeys: false
+            includeSavedKeys: true
         )
         searchTask?.cancel()
         quoteRequestID = UUID()
