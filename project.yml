@@ -1,0 +1,101 @@
+name: BuybackCalculator
+options:
+  minimumXcodeGenVersion: 2.45.4
+  deploymentTarget:
+    iOS: "26.0"
+  developmentLanguage: en
+  groupSortPosition: top
+settings:
+  base:
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 1.0
+    SWIFT_VERSION: 6.0
+    IPHONEOS_DEPLOYMENT_TARGET: 26.0
+    ENABLE_PREVIEWS: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+targets:
+  BuybackCalculator:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    configFiles:
+      Debug: Config/Secrets.xcconfig
+      Release: Config/Secrets.xcconfig
+    sources:
+      - path: BuybackCalculatorApp
+      - path: Shared
+      - path: Assets.xcassets
+    dependencies:
+      - target: BuybackWidgetExtension
+        embed: true
+      - sdk: Security.framework
+    info:
+      path: BuybackCalculatorApp/Info.plist
+      properties:
+        CFBundleDisplayName: Buyback Calculator
+        FINNHUB_API_KEY: $(FINNHUB_API_KEY)
+        OPENFIGI_API_KEY: $(OPENFIGI_API_KEY)
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.schtack.BuybackCalculator
+        PRODUCT_NAME: BuybackCalculator
+        TARGETED_DEVICE_FAMILY: 1,2
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  BuybackWidgetExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "26.0"
+    configFiles:
+      Debug: Config/Secrets.xcconfig
+      Release: Config/Secrets.xcconfig
+    sources:
+      - path: BuybackWidgetExtension
+      - path: Shared
+    dependencies:
+      - sdk: SwiftUI.framework
+      - sdk: WidgetKit.framework
+      - sdk: AppIntents.framework
+    info:
+      path: BuybackWidgetExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Buyback Widget
+        FINNHUB_API_KEY: $(FINNHUB_API_KEY)
+        OPENFIGI_API_KEY: $(OPENFIGI_API_KEY)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.schtack.BuybackCalculator.BuybackWidgetExtension
+        PRODUCT_NAME: BuybackWidgetExtension
+        TARGETED_DEVICE_FAMILY: 1,2
+        APPLICATION_EXTENSION_API_ONLY: YES
+  BuybackCalculatorTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: BuybackCalculatorTests
+      - path: Shared
+    dependencies:
+      - sdk: XCTest.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.schtack.BuybackCalculatorTests
+        PRODUCT_NAME: BuybackCalculatorTests
+schemes:
+  BuybackCalculator:
+    build:
+      targets:
+        BuybackCalculator: all
+        BuybackWidgetExtension: all
+        BuybackCalculatorTests: [test]
+    run:
+      config: Debug
+      executable: BuybackCalculator
+    test:
+      config: Debug
+      targets:
+        - BuybackCalculatorTests

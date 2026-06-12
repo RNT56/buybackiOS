@@ -1,0 +1,623 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0A99E46343CEDF3211128FBD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6785E099B7FF142D3008D84C /* SwiftUI.framework */; };
+		4B7F0D6ACA90354527CFC923 /* BuybackCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */; };
+		4FAFA4E7CD8A75579BFCC719 /* MarketData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E643154B019D90FC0941E9C1 /* MarketData.swift */; };
+		524F16A4D3C227E234E190B0 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFABE4509A82FB113137375D /* Security.framework */; };
+		542490B7D82C13FD76255F2A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7B5A18387FBCDCE5D53C80DA /* Assets.xcassets */; };
+		6544D8267A015C0494F21F2D /* BuybackWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB028776A73BE604AEAAC97D /* BuybackWidgetBundle.swift */; };
+		7E178733C94072F6DE80E2C3 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C61C47619D047D304308EDAC /* AppIntents.framework */; };
+		848D1E54C82A645B489A2116 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 534D387D11194BB2A7445011 /* ContentView.swift */; };
+		84C61354184B6590A0069E04 /* BuybackWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF47E5B51DDBE7E768F383C8 /* BuybackWidget.swift */; };
+		8FBBB367F886BF37CF65921D /* MarketData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E643154B019D90FC0941E9C1 /* MarketData.swift */; };
+		9C43BB2052E8F8063FC23868 /* MarketDataDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C73DBB82C05FB182807F6319 /* MarketDataDecodingTests.swift */; };
+		9E29383603E54BF2D3E55179 /* BuybackCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */; };
+		A485769F798E7E5921624D23 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 018DC9398D8BC71964C4E26F /* WidgetKit.framework */; };
+		BF2DEDB6FC4A147CF4C7E56D /* BuybackCalculationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BBAC552BCC1BEBE64ECE84 /* BuybackCalculationTests.swift */; };
+		CDFA8BD27BB5E2CD6E69A0EB /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0977B432A10A098ADAE37C /* XCTest.framework */; };
+		CFC04F61CC36C451FF237949 /* BuybackCalculatorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D69F740B5DAE7D338D5F43ED /* BuybackCalculatorApp.swift */; };
+		D9B15564FAD34DCCE402C7FC /* BuybackWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C9A76E0F6F0282BB7918DABD /* BuybackWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		DAE5A6CFA8552024FF0F219A /* BuybackCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */; };
+		E8903FCD09A680C72C15796D /* MarketData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E643154B019D90FC0941E9C1 /* MarketData.swift */; };
+		FE9B30E15BA6DD5F0C35FEA0 /* APIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77B46B7D7A1FA3803B0E47E /* APIKeyStore.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		2CF9230A1FAD0978764482D1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0FED12085E8103BF0157CEF3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6CF4127D30D503055EA03F77;
+			remoteInfo = BuybackWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		3E98F3F122E9CCFFF8F76138 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D9B15564FAD34DCCE402C7FC /* BuybackWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		018DC9398D8BC71964C4E26F /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		18BBAC552BCC1BEBE64ECE84 /* BuybackCalculationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackCalculationTests.swift; sourceTree = "<group>"; };
+		230F0FF232DC32042FCA664D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		486C443C56801C9AC87C1704 /* BuybackCalculatorTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BuybackCalculatorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4FE1E79C7C2503D3DE6D566E /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
+		534D387D11194BB2A7445011 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		6785E099B7FF142D3008D84C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		7B5A18387FBCDCE5D53C80DA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		986F0FFCBDD4FA1E16581E9F /* BuybackCalculator.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BuybackCalculator.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0977B432A10A098ADAE37C /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		AC1276D19EC214963E9DAFA9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		AFABE4509A82FB113137375D /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		C61C47619D047D304308EDAC /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
+		C73DBB82C05FB182807F6319 /* MarketDataDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketDataDecodingTests.swift; sourceTree = "<group>"; };
+		C9A76E0F6F0282BB7918DABD /* BuybackWidgetExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = BuybackWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB028776A73BE604AEAAC97D /* BuybackWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackWidgetBundle.swift; sourceTree = "<group>"; };
+		D69F740B5DAE7D338D5F43ED /* BuybackCalculatorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackCalculatorApp.swift; sourceTree = "<group>"; };
+		E643154B019D90FC0941E9C1 /* MarketData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketData.swift; sourceTree = "<group>"; };
+		E77B46B7D7A1FA3803B0E47E /* APIKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyStore.swift; sourceTree = "<group>"; };
+		F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackCalculator.swift; sourceTree = "<group>"; };
+		FF47E5B51DDBE7E768F383C8 /* BuybackWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackWidget.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		38A757603A64D3EC6F7EBBC4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0A99E46343CEDF3211128FBD /* SwiftUI.framework in Frameworks */,
+				A485769F798E7E5921624D23 /* WidgetKit.framework in Frameworks */,
+				7E178733C94072F6DE80E2C3 /* AppIntents.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0BC965F921D6E99E3C1E271 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				524F16A4D3C227E234E190B0 /* Security.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FB587506E79732B0120E5473 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CDFA8BD27BB5E2CD6E69A0EB /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		10BAE75E5B311920AD417B78 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				C61C47619D047D304308EDAC /* AppIntents.framework */,
+				AFABE4509A82FB113137375D /* Security.framework */,
+				6785E099B7FF142D3008D84C /* SwiftUI.framework */,
+				018DC9398D8BC71964C4E26F /* WidgetKit.framework */,
+				AA0977B432A10A098ADAE37C /* XCTest.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		19A39B402989F89F9D19DD9A /* BuybackCalculatorTests */ = {
+			isa = PBXGroup;
+			children = (
+				18BBAC552BCC1BEBE64ECE84 /* BuybackCalculationTests.swift */,
+				C73DBB82C05FB182807F6319 /* MarketDataDecodingTests.swift */,
+			);
+			path = BuybackCalculatorTests;
+			sourceTree = "<group>";
+		};
+		3086FCE630A45AC2ACB971BD /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				4FE1E79C7C2503D3DE6D566E /* Secrets.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		36DE93F375CA1FE3599A93D6 = {
+			isa = PBXGroup;
+			children = (
+				DBD30D6643321899E3AC61BD /* BuybackCalculatorApp */,
+				19A39B402989F89F9D19DD9A /* BuybackCalculatorTests */,
+				C97DA6186F59BB6DB9BF9E90 /* BuybackWidgetExtension */,
+				3086FCE630A45AC2ACB971BD /* Config */,
+				A8F9969D014D66579C87F356 /* Shared */,
+				7B5A18387FBCDCE5D53C80DA /* Assets.xcassets */,
+				10BAE75E5B311920AD417B78 /* Frameworks */,
+				8FA55F1ACA76F919AC538B61 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		8FA55F1ACA76F919AC538B61 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				986F0FFCBDD4FA1E16581E9F /* BuybackCalculator.app */,
+				486C443C56801C9AC87C1704 /* BuybackCalculatorTests.xctest */,
+				C9A76E0F6F0282BB7918DABD /* BuybackWidgetExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A8F9969D014D66579C87F356 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */,
+				E643154B019D90FC0941E9C1 /* MarketData.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		C97DA6186F59BB6DB9BF9E90 /* BuybackWidgetExtension */ = {
+			isa = PBXGroup;
+			children = (
+				FF47E5B51DDBE7E768F383C8 /* BuybackWidget.swift */,
+				CB028776A73BE604AEAAC97D /* BuybackWidgetBundle.swift */,
+				AC1276D19EC214963E9DAFA9 /* Info.plist */,
+			);
+			path = BuybackWidgetExtension;
+			sourceTree = "<group>";
+		};
+		DBD30D6643321899E3AC61BD /* BuybackCalculatorApp */ = {
+			isa = PBXGroup;
+			children = (
+				E77B46B7D7A1FA3803B0E47E /* APIKeyStore.swift */,
+				D69F740B5DAE7D338D5F43ED /* BuybackCalculatorApp.swift */,
+				534D387D11194BB2A7445011 /* ContentView.swift */,
+				230F0FF232DC32042FCA664D /* Info.plist */,
+			);
+			path = BuybackCalculatorApp;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6CF4127D30D503055EA03F77 /* BuybackWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 429C9FDE2DEB7F0A1C9F3077 /* Build configuration list for PBXNativeTarget "BuybackWidgetExtension" */;
+			buildPhases = (
+				9033FB2B023F79C7372D84E1 /* Sources */,
+				38A757603A64D3EC6F7EBBC4 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BuybackWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = BuybackWidgetExtension;
+			productReference = C9A76E0F6F0282BB7918DABD /* BuybackWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		984F91BF989CAD0430C0EA01 /* BuybackCalculator */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D9A0345A9EB8AB2427EA40E8 /* Build configuration list for PBXNativeTarget "BuybackCalculator" */;
+			buildPhases = (
+				7087683430423470E75E2AC3 /* Sources */,
+				E078805AF6F619E95264C81E /* Resources */,
+				F0BC965F921D6E99E3C1E271 /* Frameworks */,
+				3E98F3F122E9CCFFF8F76138 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				135199B4A2B707DEC1D1A6BA /* PBXTargetDependency */,
+			);
+			name = BuybackCalculator;
+			packageProductDependencies = (
+			);
+			productName = BuybackCalculator;
+			productReference = 986F0FFCBDD4FA1E16581E9F /* BuybackCalculator.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B8B87B9C0B460779B0126C25 /* BuybackCalculatorTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 163660A98C8DC72433CA33A7 /* Build configuration list for PBXNativeTarget "BuybackCalculatorTests" */;
+			buildPhases = (
+				8ED921E8870EB8742A218171 /* Sources */,
+				FB587506E79732B0120E5473 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BuybackCalculatorTests;
+			packageProductDependencies = (
+			);
+			productName = BuybackCalculatorTests;
+			productReference = 486C443C56801C9AC87C1704 /* BuybackCalculatorTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0FED12085E8103BF0157CEF3 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = BB64B443DE3ED6AA79F7898E /* Build configuration list for PBXProject "BuybackCalculator" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 36DE93F375CA1FE3599A93D6;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8FA55F1ACA76F919AC538B61 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				984F91BF989CAD0430C0EA01 /* BuybackCalculator */,
+				B8B87B9C0B460779B0126C25 /* BuybackCalculatorTests */,
+				6CF4127D30D503055EA03F77 /* BuybackWidgetExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E078805AF6F619E95264C81E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				542490B7D82C13FD76255F2A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7087683430423470E75E2AC3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FE9B30E15BA6DD5F0C35FEA0 /* APIKeyStore.swift in Sources */,
+				4B7F0D6ACA90354527CFC923 /* BuybackCalculator.swift in Sources */,
+				CFC04F61CC36C451FF237949 /* BuybackCalculatorApp.swift in Sources */,
+				848D1E54C82A645B489A2116 /* ContentView.swift in Sources */,
+				4FAFA4E7CD8A75579BFCC719 /* MarketData.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8ED921E8870EB8742A218171 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF2DEDB6FC4A147CF4C7E56D /* BuybackCalculationTests.swift in Sources */,
+				9E29383603E54BF2D3E55179 /* BuybackCalculator.swift in Sources */,
+				E8903FCD09A680C72C15796D /* MarketData.swift in Sources */,
+				9C43BB2052E8F8063FC23868 /* MarketDataDecodingTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9033FB2B023F79C7372D84E1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DAE5A6CFA8552024FF0F219A /* BuybackCalculator.swift in Sources */,
+				84C61354184B6590A0069E04 /* BuybackWidget.swift in Sources */,
+				6544D8267A015C0494F21F2D /* BuybackWidgetBundle.swift in Sources */,
+				8FBBB367F886BF37CF65921D /* MarketData.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		135199B4A2B707DEC1D1A6BA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6CF4127D30D503055EA03F77 /* BuybackWidgetExtension */;
+			targetProxy = 2CF9230A1FAD0978764482D1 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		016104F84DA29DD81A3200F9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.schtack.BuybackCalculatorTests;
+				PRODUCT_NAME = BuybackCalculatorTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		0A16E5395CFF30D8205C1202 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4FE1E79C7C2503D3DE6D566E /* Secrets.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = BuybackCalculatorApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.schtack.BuybackCalculator;
+				PRODUCT_NAME = BuybackCalculator;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A5B8FE288E194274EEB11005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4FE1E79C7C2503D3DE6D566E /* Secrets.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				INFOPLIST_FILE = BuybackWidgetExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.schtack.BuybackCalculator.BuybackWidgetExtension;
+				PRODUCT_NAME = BuybackWidgetExtension;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A8C0F3431769B9FDBCCA4712 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		B7415891D200AD3208F037EB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4FE1E79C7C2503D3DE6D566E /* Secrets.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				INFOPLIST_FILE = BuybackWidgetExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.schtack.BuybackCalculator.BuybackWidgetExtension;
+				PRODUCT_NAME = BuybackWidgetExtension;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CD46B850926D2EE64AE64EA3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4FE1E79C7C2503D3DE6D566E /* Secrets.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = BuybackCalculatorApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.schtack.BuybackCalculator;
+				PRODUCT_NAME = BuybackCalculator;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E19B07D677AA7002F7924DD7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.schtack.BuybackCalculatorTests;
+				PRODUCT_NAME = BuybackCalculatorTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E3BE2FCF1F2AEEEE8253C36E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		163660A98C8DC72433CA33A7 /* Build configuration list for PBXNativeTarget "BuybackCalculatorTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E19B07D677AA7002F7924DD7 /* Debug */,
+				016104F84DA29DD81A3200F9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		429C9FDE2DEB7F0A1C9F3077 /* Build configuration list for PBXNativeTarget "BuybackWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B7415891D200AD3208F037EB /* Debug */,
+				A5B8FE288E194274EEB11005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BB64B443DE3ED6AA79F7898E /* Build configuration list for PBXProject "BuybackCalculator" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A8C0F3431769B9FDBCCA4712 /* Debug */,
+				E3BE2FCF1F2AEEEE8253C36E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D9A0345A9EB8AB2427EA40E8 /* Build configuration list for PBXNativeTarget "BuybackCalculator" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0A16E5395CFF30D8205C1202 /* Debug */,
+				CD46B850926D2EE64AE64EA3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0FED12085E8103BF0157CEF3 /* Project object */;
+}
