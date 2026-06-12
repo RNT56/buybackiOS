@@ -512,7 +512,7 @@ private extension Array where Element == Error {
     }
 }
 
-private extension String {
+extension String {
     var trimmedForDisplay: String {
         trimmingCharacters(in: .whitespacesAndNewlines)
     }

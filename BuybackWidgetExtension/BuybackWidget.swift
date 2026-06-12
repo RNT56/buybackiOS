@@ -24,9 +24,9 @@ enum WidgetTaxProfile: String, AppEnum {
 
 struct BuybackWidgetConfiguration: WidgetConfigurationIntent {
     static let title: LocalizedStringResource = "Buy-Back Calculator"
-    static let description = IntentDescription("Calculate the buy-back price from a symbol, current gain, and live or fallback price.")
+    static let description = IntentDescription("Calculate the buy-back price from a stock symbol, company name, ISIN, or WKN.")
 
-    @Parameter(title: "Stock Symbol", default: "AAPL")
+    @Parameter(title: "Stock, ISIN, or WKN", description: "Ticker, company name, ISIN, or WKN.", default: "AAPL")
     var symbol: String
 
     @Parameter(title: "Gain %", default: 463.10)
@@ -62,7 +62,10 @@ struct BuybackWidgetConfiguration: WidgetConfigurationIntent {
 
 struct BuybackEntry: TimelineEntry, Sendable {
     let date: Date
+    let query: String
     let symbol: String
+    let assetName: String?
+    let assetExchange: String?
     let gainAtSellPercent: Double
     let fallbackSellPrice: Double
     let quote: MarketQuote?
@@ -90,6 +93,95 @@ enum WidgetPriceStatus: Equatable, Sendable {
         case .fallback:
             return .warning
         }
+    }
+}
+
+private enum WidgetMetrics {
+    static func contentPadding(for family: WidgetFamily) -> EdgeInsets {
+        switch family {
+        case .systemSmall:
+            EdgeInsets(top: 13, leading: 13, bottom: 13, trailing: 13)
+        case .systemLarge:
+            EdgeInsets(top: 18, leading: 18, bottom: 18, trailing: 18)
+        default:
+            EdgeInsets(top: 15, leading: 15, bottom: 15, trailing: 15)
+        }
+    }
+
+    static func surfaceRadius(for family: WidgetFamily) -> CGFloat {
+        switch family {
+        case .systemSmall:
+            return 15
+        case .systemLarge:
+            return 20
+        default:
+            return 18
+        }
+    }
+
+    static func pillRadius(for family: WidgetFamily) -> CGFloat {
+        switch family {
+        case .systemSmall:
+            return 12
+        case .systemLarge:
+            return 15
+        default:
+            return 14
+        }
+    }
+
+    static func iconBubbleSize(compact: Bool) -> CGFloat {
+        compact ? 30 : 34
+    }
+
+    static func iconSize(compact: Bool) -> CGFloat {
+        compact ? 20 : 22
+    }
+}
+
+private struct WidgetGlassSurface: ViewModifier {
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    let tint: Color
+    let radius: CGFloat
+    let fillOpacity: Double
+    let glassTintOpacity: Double
+    let strokeOpacity: Double
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+                shape
+                    .fill(tint.opacity(renderingMode == .fullColor ? fillOpacity : min(fillOpacity, 0.06)))
+                    .glassEffect(
+                        .regular.tint(tint.opacity(renderingMode == .fullColor ? glassTintOpacity : 0.035)),
+                        in: shape
+                    )
+                    .overlay {
+                        shape.stroke(.white.opacity(renderingMode == .fullColor ? strokeOpacity : 0.08), lineWidth: 0.7)
+                    }
+            }
+    }
+}
+
+private extension View {
+    func widgetGlassSurface(
+        tint: Color = .primary,
+        radius: CGFloat,
+        fillOpacity: Double = 0.07,
+        glassTintOpacity: Double = 0.08,
+        strokeOpacity: Double = 0.12
+    ) -> some View {
+        modifier(
+            WidgetGlassSurface(
+                tint: tint,
+                radius: radius,
+                fillOpacity: fillOpacity,
+                glassTintOpacity: glassTintOpacity,
+                strokeOpacity: strokeOpacity
+            )
+        )
     }
 }
 
@@ -124,66 +216,95 @@ struct BuybackProvider: AppIntentTimelineProvider {
         configuration: BuybackWidgetConfiguration,
         date: Date = .now
     ) async -> BuybackEntry {
-        let normalizedSymbol = configuration.symbol.normalizedStockSymbol
-        let asset = MarketAsset(
-            symbol: normalizedSymbol,
-            name: normalizedSymbol,
-            currencyCode: BuybackCalculator.defaultCurrencyCode,
-            source: .finnhub
-        )
+        let query = configuration.symbol.trimmedForDisplay
+        let directAsset = fallbackAsset(for: query)
 
         guard let client = MarketDataClientFactory.make() else {
             return makeFallbackEntry(
                 configuration: configuration,
                 date: date,
-                reason: "Missing API key"
+                reason: "Missing API key",
+                asset: directAsset
             )
         }
 
         do {
-            let quote = try await client.quote(for: asset)
-            let calculation = BuybackCalculator.calculate(
-                symbol: normalizedSymbol,
-                sellPrice: quote.price,
-                gainAtSellPercent: configuration.gainAtSellPercent,
-                sharesToSell: 1,
-                taxProfile: configuration.taxProfile.taxProfile,
-                taxRatePercent: configuration.taxRatePercent,
-                taxCurrencyCode: configuration.taxCurrency,
-                fxRateToTaxCurrency: configuration.fxRateToTaxCurrency,
-                targetExtraSharesPercent: configuration.targetExtraSharesPercent,
-                sellFeeTotal: configuration.sellFeeTotal,
-                buyFeeTotal: configuration.buyFeeTotal,
-                slippagePercent: configuration.slippagePercent,
-                currencyCode: quote.currencyCode
-            )
+            let asset = try await resolveAsset(for: query, client: client)
 
-            return BuybackEntry(
-                date: date,
-                symbol: normalizedSymbol,
-                gainAtSellPercent: configuration.gainAtSellPercent,
-                fallbackSellPrice: configuration.fallbackSellPrice,
-                quote: quote,
-                priceStatus: .live,
-                calculation: calculation
-            )
+            do {
+                return try await makeLiveEntry(
+                    configuration: configuration,
+                    date: date,
+                    query: query,
+                    asset: asset,
+                    client: client
+                )
+            } catch {
+                return makeFallbackEntry(
+                    configuration: configuration,
+                    date: date,
+                    reason: fallbackReason(for: error),
+                    asset: asset
+                )
+            }
         } catch {
             return makeFallbackEntry(
                 configuration: configuration,
                 date: date,
-                reason: fallbackReason(for: error)
+                reason: fallbackReason(for: error),
+                asset: directAsset
             )
         }
+    }
+
+    private func makeLiveEntry(
+        configuration: BuybackWidgetConfiguration,
+        date: Date,
+        query: String,
+        asset: MarketAsset,
+        client: CompositeMarketDataClient
+    ) async throws -> BuybackEntry {
+        let quote = try await client.quote(for: asset)
+        let calculation = BuybackCalculator.calculate(
+            symbol: asset.symbol,
+            sellPrice: quote.price,
+            gainAtSellPercent: configuration.gainAtSellPercent,
+            sharesToSell: 1,
+            taxProfile: configuration.taxProfile.taxProfile,
+            taxRatePercent: configuration.taxRatePercent,
+            taxCurrencyCode: configuration.taxCurrency,
+            fxRateToTaxCurrency: configuration.fxRateToTaxCurrency,
+            targetExtraSharesPercent: configuration.targetExtraSharesPercent,
+            sellFeeTotal: configuration.sellFeeTotal,
+            buyFeeTotal: configuration.buyFeeTotal,
+            slippagePercent: configuration.slippagePercent,
+            currencyCode: quote.currencyCode
+        )
+
+        return BuybackEntry(
+            date: date,
+            query: query,
+            symbol: asset.symbol,
+            assetName: asset.name,
+            assetExchange: asset.exchange.nilIfEmpty,
+            gainAtSellPercent: configuration.gainAtSellPercent,
+            fallbackSellPrice: configuration.fallbackSellPrice,
+            quote: quote,
+            priceStatus: .live,
+            calculation: calculation
+        )
     }
 
     private func makeFallbackEntry(
         configuration: BuybackWidgetConfiguration,
         date: Date,
-        reason: String
+        reason: String,
+        asset: MarketAsset? = nil
     ) -> BuybackEntry {
-        let normalizedSymbol = configuration.symbol.normalizedStockSymbol
+        let query = configuration.symbol.trimmedForDisplay
+        let fallbackAsset = asset ?? fallbackAsset(for: query)
         let calculation = BuybackCalculator.calculate(
-            symbol: normalizedSymbol,
+            symbol: fallbackAsset.symbol,
             sellPrice: configuration.fallbackSellPrice,
             gainAtSellPercent: configuration.gainAtSellPercent,
             sharesToSell: 1,
@@ -195,17 +316,70 @@ struct BuybackProvider: AppIntentTimelineProvider {
             sellFeeTotal: configuration.sellFeeTotal,
             buyFeeTotal: configuration.buyFeeTotal,
             slippagePercent: configuration.slippagePercent,
-            currencyCode: BuybackCalculator.defaultCurrencyCode
+            currencyCode: fallbackAsset.currencyCode
         )
 
         return BuybackEntry(
             date: date,
-            symbol: normalizedSymbol,
+            query: query,
+            symbol: fallbackAsset.symbol,
+            assetName: fallbackAsset.name,
+            assetExchange: fallbackAsset.exchange.nilIfEmpty,
             gainAtSellPercent: configuration.gainAtSellPercent,
             fallbackSellPrice: configuration.fallbackSellPrice,
             quote: nil,
             priceStatus: .fallback(reason),
             calculation: calculation
+        )
+    }
+
+    private func resolveAsset(
+        for query: String,
+        client: CompositeMarketDataClient
+    ) async throws -> MarketAsset {
+        let cleanedQuery = query.trimmedForDisplay
+        let fallbackAsset = fallbackAsset(for: cleanedQuery)
+
+        guard cleanedQuery.count >= 2 else {
+            return fallbackAsset
+        }
+
+        do {
+            let matches = try await client.searchAssets(query: cleanedQuery)
+            return preferredAsset(from: matches, matching: cleanedQuery) ?? fallbackAsset
+        } catch {
+            if cleanedQuery.normalizedStockSymbol == fallbackAsset.symbol,
+               !fallbackAsset.symbol.isEmpty,
+               !cleanedQuery.isLikelyISIN,
+               !cleanedQuery.isLikelyWKN {
+                return fallbackAsset
+            }
+            throw error
+        }
+    }
+
+    private func preferredAsset(
+        from assets: [MarketAsset],
+        matching query: String
+    ) -> MarketAsset? {
+        let normalizedQuery = query.normalizedStockSymbol
+        let upperQuery = query.trimmedForDisplay.uppercased()
+
+        return assets.first { $0.symbol == normalizedQuery }
+            ?? assets.first { $0.isin?.uppercased() == upperQuery || $0.wkn?.uppercased() == upperQuery }
+            ?? assets.first { $0.name.localizedCaseInsensitiveContains(query.trimmedForDisplay) }
+            ?? assets.first
+    }
+
+    private func fallbackAsset(for query: String) -> MarketAsset {
+        let normalizedSymbol = query.normalizedStockSymbol
+        let symbol = normalizedSymbol.isEmpty ? BuybackCalculator.defaultSymbol : normalizedSymbol
+
+        return MarketAsset(
+            symbol: symbol,
+            name: query.nilIfEmpty ?? symbol,
+            currencyCode: symbol.guessedCurrencyCode,
+            source: .finnhub
         )
     }
 
@@ -288,14 +462,7 @@ struct BuybackWidgetEntryView: View {
     }
 
     private var contentPadding: EdgeInsets {
-        switch family {
-        case .systemSmall:
-            EdgeInsets(top: 13, leading: 13, bottom: 13, trailing: 13)
-        case .systemLarge:
-            EdgeInsets(top: 18, leading: 18, bottom: 18, trailing: 18)
-        default:
-            EdgeInsets(top: 15, leading: 15, bottom: 15, trailing: 15)
-        }
+        WidgetMetrics.contentPadding(for: family)
     }
 
     private func smallView(_ calculation: BuybackCalculation) -> some View {
@@ -376,6 +543,15 @@ struct BuybackWidgetEntryView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .widgetGlassSurface(
+                tint: .teal,
+                radius: WidgetMetrics.surfaceRadius(for: family),
+                fillOpacity: 0.075,
+                glassTintOpacity: 0.12,
+                strokeOpacity: 0.13
+            )
 
             DropBar(dropPercent: calculation.requiredDropPercent)
 
@@ -426,7 +602,7 @@ struct BuybackWidgetEntryView: View {
                 .font(family == .systemSmall ? .headline : .title3.weight(.bold))
                 .lineLimit(1)
 
-            Text("Use Edit Widget to set a symbol, gain above -100%, and fallback price above 0.")
+            Text("Set Stock, ISIN, or WKN in widget settings, with gain above -100% and fallback price above 0.")
                 .font(family == .systemSmall ? .caption2 : .caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(family == .systemSmall ? 4 : 3)
@@ -441,28 +617,54 @@ private struct WidgetHeader: View {
     let compact: Bool
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: compact ? 7 : 9) {
             BuybackIcon(entry.priceStatus.icon, tint: statusTint)
                 .widgetAccentable()
-                .frame(width: compact ? 24 : 30, height: compact ? 24 : 30)
+                .frame(width: WidgetMetrics.iconSize(compact: compact), height: WidgetMetrics.iconSize(compact: compact))
+                .frame(width: WidgetMetrics.iconBubbleSize(compact: compact), height: WidgetMetrics.iconBubbleSize(compact: compact))
                 .background {
                     Circle()
                         .fill(statusTint.opacity(0.12))
                         .glassEffect(.regular.tint(statusTint.opacity(0.18)), in: Circle())
                 }
 
-            Text(entry.symbol.isEmpty ? "Stock" : entry.symbol)
-                .font(compact ? .caption.weight(.bold) : .subheadline.weight(.bold))
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: compact ? 0 : 1) {
+                Text(entry.symbol.isEmpty ? "Stock" : entry.symbol)
+                    .font(compact ? .caption.weight(.bold) : .subheadline.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                if !compact, let descriptor {
+                    Text(descriptor)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                }
+            }
 
             Spacer(minLength: 4)
 
-            Text(entry.priceStatus.label)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(statusTint)
-                .lineLimit(1)
+            WidgetStatusPill(status: entry.priceStatus)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var descriptor: String? {
+        let cleanedName = entry.assetName?.trimmedForDisplay
+        let name = cleanedName.flatMap { $0.caseInsensitiveCompare(entry.symbol) == .orderedSame ? nil : $0.nilIfEmpty }
+        let exchange = entry.assetExchange?.trimmedForDisplay.nilIfEmpty
+
+        switch (name, exchange) {
+        case (.some(let name), .some(let exchange)):
+            return "\(name) - \(exchange)"
+        case (.some(let name), .none):
+            return name
+        case (.none, .some(let exchange)):
+            return exchange
+        case (.none, .none):
+            return nil
+        }
     }
 
     private var statusTint: Color {
@@ -475,7 +677,47 @@ private struct WidgetHeader: View {
     }
 }
 
+private struct WidgetStatusPill: View {
+    @Environment(\.widgetFamily) private var family
+
+    let status: WidgetPriceStatus
+
+    var body: some View {
+        HStack(spacing: 4) {
+            BuybackIcon(status.icon, tint: tint)
+                .frame(width: 11, height: 11)
+                .widgetAccentable()
+
+            Text(status.label)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .padding(.horizontal, family == .systemSmall ? 7 : 8)
+        .padding(.vertical, family == .systemSmall ? 4 : 5)
+        .widgetGlassSurface(
+            tint: tint,
+            radius: WidgetMetrics.pillRadius(for: family),
+            fillOpacity: 0.12,
+            glassTintOpacity: 0.16,
+            strokeOpacity: 0.14
+        )
+    }
+
+    private var tint: Color {
+        switch status {
+        case .live:
+            return .teal
+        case .fallback:
+            return .orange
+        }
+    }
+}
+
 private struct CompactMetric: View {
+    @Environment(\.widgetFamily) private var family
+
     let title: String
     let value: String
 
@@ -494,19 +736,17 @@ private struct CompactMetric: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 7)
         .padding(.vertical, 5)
-        .background {
-            let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-            shape
-                .fill(.primary.opacity(0.052))
-                .glassEffect(.regular, in: shape)
-                .overlay {
-                    shape.stroke(.white.opacity(0.12), lineWidth: 0.6)
-                }
-        }
+        .widgetGlassSurface(
+            radius: WidgetMetrics.surfaceRadius(for: family),
+            fillOpacity: 0.052,
+            glassTintOpacity: 0.04,
+            strokeOpacity: 0.12
+        )
     }
 }
 
 private struct MetricTile: View {
+    @Environment(\.widgetFamily) private var family
     @Environment(\.widgetRenderingMode) private var renderingMode
 
     let title: String
@@ -539,15 +779,13 @@ private struct MetricTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
-        .background {
-            let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-            shape
-                .fill(resolvedTint.opacity(renderingMode == .fullColor ? 0.11 : 0.055))
-                .glassEffect(.regular.tint(resolvedTint.opacity(renderingMode == .fullColor ? 0.14 : 0.04)), in: shape)
-                .overlay {
-                    shape.stroke(.white.opacity(renderingMode == .fullColor ? 0.14 : 0.08), lineWidth: 0.6)
-                }
-        }
+        .widgetGlassSurface(
+            tint: resolvedTint,
+            radius: WidgetMetrics.surfaceRadius(for: family),
+            fillOpacity: renderingMode == .fullColor ? 0.11 : 0.055,
+            glassTintOpacity: renderingMode == .fullColor ? 0.14 : 0.04,
+            strokeOpacity: renderingMode == .fullColor ? 0.14 : 0.08
+        )
     }
 }
 
@@ -636,7 +874,7 @@ struct BuybackWidget: Widget {
             BuybackWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Buy-Back Calculator")
-        .description("Uses a live quote when available and falls back to the configured price.")
+        .description("Resolves a stock symbol, company name, ISIN, or WKN, then uses a live quote when available.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
         .containerBackgroundRemovable(true)
@@ -651,7 +889,10 @@ private enum BuybackWidgetKind {
 private extension BuybackEntry {
     static let previewLive = BuybackEntry(
         date: .now,
+        query: "AAPL",
         symbol: "AAPL",
+        assetName: "Apple Inc.",
+        assetExchange: "US",
         gainAtSellPercent: 463.10,
         fallbackSellPrice: 185,
         quote: MarketQuote(
@@ -673,7 +914,10 @@ private extension BuybackEntry {
 
     static let previewFallback = BuybackEntry(
         date: .now,
+        query: "AAPL",
         symbol: "AAPL",
+        assetName: "Apple Inc.",
+        assetExchange: "US",
         gainAtSellPercent: 463.10,
         fallbackSellPrice: 185,
         quote: nil,
@@ -687,7 +931,10 @@ private extension BuybackEntry {
 
     static let previewInvalid = BuybackEntry(
         date: .now,
+        query: "",
         symbol: "",
+        assetName: nil,
+        assetExchange: nil,
         gainAtSellPercent: -120,
         fallbackSellPrice: 0,
         quote: nil,
