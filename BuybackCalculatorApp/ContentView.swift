@@ -10,12 +10,18 @@ struct ContentView: View {
     @AppStorage("buybackCalculator.shares") private var sharesText = "1"
     @AppStorage("buybackCalculator.taxRate") private var taxRateText = BuybackCalculator.fixedTaxRatePercent.inputString
     @AppStorage("buybackCalculator.targetExtra") private var targetExtraText = BuybackCalculator.fixedTargetExtraSharesPercent.inputString
+    @AppStorage("buybackCalculator.sellFee") private var sellFeeText = BuybackCalculator.defaultSellFeeTotal.inputString
+    @AppStorage("buybackCalculator.buyFee") private var buyFeeText = BuybackCalculator.defaultBuyFeeTotal.inputString
+    @AppStorage("buybackCalculator.slippage") private var slippageText = BuybackCalculator.defaultSlippagePercent.inputString
 
     @StateObject private var lookup = MarketLookupViewModel()
     @StateObject private var apiKeys = APIKeySettingsViewModel()
+    @StateObject private var scenarios = SavedScenarioStore()
     @State private var manualPriceEnabled = false
     @State private var advancedExpanded = false
     @State private var apiKeysExpanded = false
+    @State private var settingsPresented = false
+    @State private var scenarioMessage: LookupMessage?
     @FocusState private var focusedField: CalculatorField?
 
     private var activeSymbol: String {
@@ -46,12 +52,27 @@ struct ContentView: View {
         BuybackCalculator.parseDecimal(targetExtraText)
     }
 
+    private var sellFeeTotal: Double? {
+        BuybackCalculator.parseDecimal(sellFeeText)
+    }
+
+    private var buyFeeTotal: Double? {
+        BuybackCalculator.parseDecimal(buyFeeText)
+    }
+
+    private var slippagePercent: Double? {
+        BuybackCalculator.parseDecimal(slippageText)
+    }
+
     private var calculation: BuybackCalculation? {
         guard let sellPrice,
               let gainPercent,
               let sharesToSell,
               let taxRatePercent,
-              let targetExtraSharesPercent
+              let targetExtraSharesPercent,
+              let sellFeeTotal,
+              let buyFeeTotal,
+              let slippagePercent
         else {
             return nil
         }
@@ -63,6 +84,9 @@ struct ContentView: View {
             sharesToSell: sharesToSell,
             taxRatePercent: taxRatePercent,
             targetExtraSharesPercent: targetExtraSharesPercent,
+            sellFeeTotal: sellFeeTotal,
+            buyFeeTotal: buyFeeTotal,
+            slippagePercent: slippagePercent,
             currencyCode: activeCurrencyCode
         )
     }
@@ -73,13 +97,16 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     header
                     lookupPanel
-                    apiKeyPanel
+                    if !apiKeys.hasUsableFinnhubAPIKey {
+                        apiKeyPrompt
+                    }
                     inputPanel
 
                     if let calculation {
                         resultSummary(calculation)
                         positionBreakdown(calculation)
                         sensitivitySection(calculation)
+                        scenarioSection(calculation)
                     } else {
                         invalidState
                     }
@@ -99,6 +126,15 @@ struct ContentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        settingsPresented = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    .buttonStyle(.glass)
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         refreshSelectedQuote()
@@ -118,6 +154,33 @@ struct ContentView: View {
             }
         }
         .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+        .sheet(isPresented: $settingsPresented) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        apiKeyPanel
+                        widgetStatus
+                    }
+                    .frame(maxWidth: 760, alignment: .leading)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                }
+                .background {
+                    LiquidGlassBackground()
+                        .ignoresSafeArea()
+                }
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") {
+                            settingsPresented = false
+                        }
+                    }
+                }
+            }
+            .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+        }
         .task {
             configureLookupClient()
             apiKeysExpanded = !apiKeys.hasUsableFinnhubAPIKey
@@ -131,6 +194,9 @@ struct ContentView: View {
                 symbolText = newValue.normalizedStockSymbol
             }
             lookup.scheduleSearch(query: newValue)
+        }
+        .onOpenURL { url in
+            handleDeepLink(url)
         }
     }
 
@@ -154,10 +220,13 @@ struct ContentView: View {
                 Spacer(minLength: 8)
             }
 
-            HStack(spacing: 8) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], alignment: .leading, spacing: 8) {
                 GlassBadge(title: "Price", value: sellPrice.map { $0.moneyString(currencyCode: activeCurrencyCode) } ?? "Missing")
                 GlassBadge(title: "Tax", value: parsedText(taxRateText) + "%")
                 GlassBadge(title: "Target", value: "+" + parsedText(targetExtraText) + "%")
+                if (sellFeeTotal ?? 0) + (buyFeeTotal ?? 0) > 0 || (slippagePercent ?? 0) > 0 {
+                    GlassBadge(title: "Costs", value: ((sellFeeTotal ?? 0) + (buyFeeTotal ?? 0)).moneyString(currencyCode: activeCurrencyCode))
+                }
             }
         }
     }
@@ -209,6 +278,33 @@ struct ContentView: View {
             if let selectedAsset = lookup.selectedAsset {
                 SelectedAssetRow(asset: selectedAsset, quote: lookup.quote)
             }
+        }
+        .liquidSurface()
+    }
+
+    private var apiKeyPrompt: some View {
+        HStack(spacing: 12) {
+            LiquidGlassIcon(systemImage: "key", tint: .orange, size: 38)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Live prices are off")
+                    .font(.headline)
+                Text("Add a Finnhub key in Settings for autocomplete and live quote refreshes.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                apiKeysExpanded = true
+                settingsPresented = true
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.glass)
+            .accessibilityLabel("Open API key settings")
         }
         .liquidSurface()
     }
@@ -337,15 +433,39 @@ struct ContentView: View {
                     ) {
                         decimalField("Shares", text: $sharesText, suffix: "sh", icon: "number", field: .shares)
                         decimalField("Tax rate", text: $taxRateText, suffix: "%", icon: "building.columns", field: .taxRate)
-                    }
 
-                    decimalField(
-                        "Extra shares target",
-                        text: $targetExtraText,
-                        suffix: "%",
-                        icon: "arrow.up.forward.circle",
-                        field: .targetExtra
-                    )
+                        decimalField(
+                            "Extra shares target",
+                            text: $targetExtraText,
+                            suffix: "%",
+                            icon: "arrow.up.forward.circle",
+                            field: .targetExtra
+                        )
+
+                        decimalField(
+                            "Slippage buffer",
+                            text: $slippageText,
+                            suffix: "%",
+                            icon: "waveform.path.ecg",
+                            field: .slippage
+                        )
+
+                        decimalField(
+                            "Sell fees",
+                            text: $sellFeeText,
+                            suffix: activeCurrencyCode,
+                            icon: "minus.circle",
+                            field: .sellFee
+                        )
+
+                        decimalField(
+                            "Buy fees",
+                            text: $buyFeeText,
+                            suffix: activeCurrencyCode,
+                            icon: "plus.circle",
+                            field: .buyFee
+                        )
+                    }
 
                     Button {
                         refreshSelectedQuote()
@@ -446,8 +566,11 @@ struct ContentView: View {
             MetricTile(title: "Gain", value: calculation.gainAtSellPercent.percentString, systemImage: "percent")
             MetricTile(title: "Cost basis", value: calculation.averageCostBasis.moneyString(currencyCode: calculation.currencyCode), systemImage: "banknote")
             MetricTile(title: "After-tax cash", value: calculation.afterTaxCash.moneyString(currencyCode: calculation.currencyCode), systemImage: "creditcard")
+            MetricTile(title: "Buyback cash", value: calculation.cashAvailableForBuyback.moneyString(currencyCode: calculation.currencyCode), systemImage: "cart")
             MetricTile(title: "Tax estimate", value: calculation.taxAmount.moneyString(currencyCode: calculation.currencyCode), systemImage: "building.columns")
             MetricTile(title: "Target shares", value: calculation.targetShareCount.shareString, systemImage: "plus.forwardslash.minus")
+            MetricTile(title: "Trading costs", value: (calculation.sellFeeTotal + calculation.buyFeeTotal).moneyString(currencyCode: calculation.currencyCode), systemImage: "receipt")
+            MetricTile(title: "Slippage", value: calculation.slippagePercent.compactPercentString, systemImage: "waveform.path.ecg")
         }
     }
 
@@ -478,6 +601,49 @@ struct ContentView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 9)
                     .liquidCardBackground(tint: row.isBase ? LiquidPalette.accent.opacity(0.34) : LiquidPalette.blue.opacity(0.16))
+                }
+            }
+        }
+        .liquidSurface()
+    }
+
+    private func scenarioSection(_ calculation: BuybackCalculation) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                SectionTitle("Scenarios", systemImage: "tray.full")
+                Spacer(minLength: 8)
+
+                Button {
+                    saveScenario(calculation)
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .buttonStyle(.glass)
+                .accessibilityLabel("Save current scenario")
+            }
+
+            if let scenarioMessage {
+                StatusRow(message: scenarioMessage)
+            }
+
+            if scenarios.scenarios.isEmpty {
+                Text("No saved scenarios yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 10)
+                    .liquidCardBackground(tint: LiquidPalette.blue.opacity(0.16))
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(scenarios.scenarios) { scenario in
+                        SavedScenarioRow(scenario: scenario) {
+                            loadScenario(scenario)
+                        } onDelete: {
+                            scenarios.delete(scenario)
+                            scenarioMessage = .info("Scenario deleted.")
+                        }
+                    }
                 }
             }
         }
@@ -576,6 +742,18 @@ struct ContentView: View {
             return "Target extra shares must be 0% or higher."
         }
 
+        guard let sellFeeTotal, sellFeeTotal >= 0 else {
+            return "Sell fees must be 0 or higher."
+        }
+
+        guard let buyFeeTotal, buyFeeTotal >= 0 else {
+            return "Buy fees must be 0 or higher."
+        }
+
+        guard let slippagePercent, slippagePercent >= 0 else {
+            return "Slippage must be 0% or higher."
+        }
+
         return "Enter a selected asset, current price, and gain."
     }
 
@@ -590,6 +768,9 @@ struct ContentView: View {
                 sharesToSell: calculation.sharesToSell,
                 taxRatePercent: calculation.taxRatePercent,
                 targetExtraSharesPercent: calculation.targetExtraSharesPercent,
+                sellFeeTotal: calculation.sellFeeTotal,
+                buyFeeTotal: calculation.buyFeeTotal,
+                slippagePercent: calculation.slippagePercent,
                 currencyCode: calculation.currencyCode
             ) else {
                 return nil
@@ -663,166 +844,104 @@ struct ContentView: View {
         )
     }
 
+    private func saveScenario(_ calculation: BuybackCalculation) {
+        let scenario = SavedBuybackScenario(
+            id: UUID(),
+            name: displayName,
+            savedAt: .now,
+            assetQuery: assetQuery,
+            selectedAsset: lookup.selectedAsset,
+            manualPriceEnabled: manualPriceEnabled,
+            symbol: calculation.symbol,
+            currencyCode: calculation.currencyCode,
+            sellPrice: calculation.sellPrice,
+            gainPercent: calculation.gainAtSellPercent,
+            sharesToSell: calculation.sharesToSell,
+            taxRatePercent: calculation.taxRatePercent,
+            targetExtraSharesPercent: calculation.targetExtraSharesPercent,
+            sellFeeTotal: calculation.sellFeeTotal,
+            buyFeeTotal: calculation.buyFeeTotal,
+            slippagePercent: calculation.slippagePercent
+        )
+
+        scenarios.save(scenario)
+        scenarioMessage = .info("Scenario saved.")
+    }
+
+    private func loadScenario(_ scenario: SavedBuybackScenario) {
+        sellPriceText = scenario.sellPrice.inputString
+        gainPercentText = scenario.gainPercent.inputString
+        sharesText = scenario.sharesToSell.inputString
+        taxRateText = scenario.taxRatePercent.inputString
+        targetExtraText = scenario.targetExtraSharesPercent.inputString
+        sellFeeText = scenario.sellFeeTotal.inputString
+        buyFeeText = scenario.buyFeeTotal.inputString
+        slippageText = scenario.slippagePercent.inputString
+        manualPriceEnabled = scenario.manualPriceEnabled
+        focusedField = nil
+
+        if let asset = scenario.selectedAsset {
+            lookup.prepareSelection(asset)
+            persist(asset)
+            assetQuery = asset.symbol
+            symbolText = asset.symbol
+
+            if !scenario.manualPriceEnabled {
+                refreshSelectedQuote()
+            }
+        } else {
+            lookup.clearSelection()
+            selectedAssetData = ""
+            assetQuery = scenario.displaySymbol
+            symbolText = scenario.displaySymbol
+            lookup.scheduleSearch(query: scenario.displaySymbol)
+        }
+
+        scenarioMessage = .info("Scenario loaded.")
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "buybackcalculator" else { return }
+
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let queryItems = components?.queryItems ?? []
+
+        func value(_ names: String...) -> String? {
+            queryItems.first { item in
+                names.contains { $0.caseInsensitiveCompare(item.name) == .orderedSame }
+            }?.value?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+        }
+
+        let pathSymbol = url.pathComponents.dropFirst().first
+        let candidate = value("symbol", "ticker") ?? pathSymbol ?? url.host
+
+        if let symbol = candidate?.normalizedStockSymbol, !symbol.isEmpty {
+            lookup.clearSelection()
+            selectedAssetData = ""
+            assetQuery = symbol
+            symbolText = symbol
+            lookup.scheduleSearch(query: symbol)
+        }
+
+        if let price = value("price", "sellPrice", "fallbackPrice") {
+            sellPriceText = price
+            manualPriceEnabled = true
+        }
+
+        if let gain = value("gain", "gainPercent", "gainAtSellPercent") {
+            gainPercentText = gain
+        }
+
+        if let shares = value("shares", "sharesToSell") {
+            sharesText = shares
+        }
+
+        scenarioMessage = .info("Loaded widget values.")
+        focusedField = .gain
+    }
+
     private func parsedText(_ text: String) -> String {
         BuybackCalculator.parseDecimal(text)?.inputString ?? text
-    }
-}
-
-@MainActor
-private final class MarketLookupViewModel: ObservableObject {
-    @Published var suggestions: [MarketAsset] = []
-    @Published var selectedAsset: MarketAsset?
-    @Published var quote: MarketQuote?
-    @Published var message: LookupMessage?
-    @Published var isSearching = false
-    @Published var isFetchingQuote = false
-
-    private var client = MarketDataClientFactory.make()
-    private var searchCache: [String: [MarketAsset]] = [:]
-    private var quoteCache: [String: CachedQuote] = [:]
-    private var searchTask: Task<Void, Never>?
-    private var quoteTask: Task<Void, Never>?
-
-    func configure(finnhubAPIKey: String?, openFIGIAPIKey: String?) {
-        client = MarketDataClientFactory.make(
-            finnhubAPIKey: finnhubAPIKey,
-            openFIGIAPIKey: openFIGIAPIKey
-        )
-        searchTask?.cancel()
-        quoteTask?.cancel()
-        searchCache.removeAll(keepingCapacity: true)
-        quoteCache.removeAll(keepingCapacity: true)
-        isSearching = false
-        isFetchingQuote = false
-    }
-
-    func scheduleSearch(query: String) {
-        searchTask?.cancel()
-
-        let cleanedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cacheKey = cleanedQuery.uppercased()
-        guard cleanedQuery.count >= 2 else {
-            suggestions = []
-            message = nil
-            isSearching = false
-            return
-        }
-
-        guard cleanedQuery.normalizedStockSymbol != selectedAsset?.symbol else {
-            suggestions = []
-            isSearching = false
-            return
-        }
-
-        if let cachedResults = searchCache[cacheKey] {
-            suggestions = cachedResults
-            isSearching = false
-            message = cachedResults.isEmpty ? .info("No matching assets found.") : nil
-            return
-        }
-
-        guard let client else {
-            suggestions = []
-            isSearching = false
-            message = .warning("Add FINNHUB_API_KEY in Config/Secrets.xcconfig to enable autocomplete and live prices.")
-            return
-        }
-
-        isSearching = true
-        message = nil
-
-        searchTask = Task { [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: 300_000_000)
-                let results = try await client.searchAssets(query: cleanedQuery)
-                guard !Task.isCancelled else { return }
-                self?.applySearchResults(results, cacheKey: cacheKey)
-            } catch is CancellationError {
-                return
-            } catch {
-                guard !Task.isCancelled else { return }
-                self?.applySearchError(error)
-            }
-        }
-    }
-
-    func prepareSelection(_ asset: MarketAsset) {
-        selectedAsset = asset
-        suggestions = []
-        message = nil
-        quote = nil
-    }
-
-    func restoreSelection(_ asset: MarketAsset) {
-        selectedAsset = asset
-    }
-
-    func clearSelection() {
-        selectedAsset = nil
-        quote = nil
-    }
-
-    func fetchQuote(for asset: MarketAsset) async -> MarketQuote? {
-        quoteTask?.cancel()
-        let cacheKey = asset.id
-        if let cached = quoteCache[cacheKey], cached.isFresh {
-            selectedAsset = asset
-            quote = cached.quote
-            message = nil
-            return cached.quote
-        }
-
-        guard let client else {
-            quote = nil
-            message = .warning("Live quote unavailable until FINNHUB_API_KEY is configured.")
-            return nil
-        }
-
-        selectedAsset = asset
-        isFetchingQuote = true
-        message = nil
-
-        do {
-            let quote = try await client.quote(for: asset)
-            self.quote = quote
-            quoteCache[cacheKey] = CachedQuote(quote: quote, storedAt: .now)
-            isFetchingQuote = false
-            return quote
-        } catch {
-            self.quote = nil
-            isFetchingQuote = false
-            message = .warning(message(for: error))
-            return nil
-        }
-    }
-
-    private func applySearchResults(_ results: [MarketAsset], cacheKey: String) {
-        searchCache[cacheKey] = results
-        suggestions = results
-        isSearching = false
-        message = results.isEmpty ? .info("No matching assets found.") : nil
-    }
-
-    private func applySearchError(_ error: Error) {
-        suggestions = []
-        isSearching = false
-        message = .warning(message(for: error))
-    }
-
-    private func message(for error: Error) -> String {
-        if let marketDataError = error as? MarketDataError {
-            return marketDataError.localizedDescription
-        }
-        return "Market-data request failed. Enter the price manually."
-    }
-
-    private struct CachedQuote {
-        let quote: MarketQuote
-        let storedAt: Date
-
-        var isFresh: Bool {
-            abs(storedAt.timeIntervalSinceNow) < 60
-        }
     }
 }
 
@@ -833,26 +952,11 @@ private enum CalculatorField: Hashable {
     case shares
     case taxRate
     case targetExtra
+    case sellFee
+    case buyFee
+    case slippage
     case finnhubKey
     case openFIGIKey
-}
-
-private struct LookupMessage: Equatable {
-    enum Style {
-        case info
-        case warning
-    }
-
-    let text: String
-    let style: Style
-
-    static func info(_ text: String) -> LookupMessage {
-        LookupMessage(text: text, style: .info)
-    }
-
-    static func warning(_ text: String) -> LookupMessage {
-        LookupMessage(text: text, style: .warning)
-    }
 }
 
 private struct SensitivityRow: Identifiable {
@@ -862,6 +966,55 @@ private struct SensitivityRow: Identifiable {
     let maximumBuybackPrice: Double
     let requiredDropPercent: Double
     let isBase: Bool
+}
+
+private struct SavedScenarioRow: View {
+    let scenario: SavedBuybackScenario
+    let onLoad: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Button(action: onLoad) {
+                HStack(alignment: .center, spacing: 12) {
+                    LiquidGlassIcon(systemImage: "bookmark.fill", tint: LiquidPalette.blue, size: 34)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(scenario.displayTitle)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 8)
+                }
+            }
+            .buttonStyle(.plain)
+
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.glass)
+            .accessibilityLabel("Delete saved scenario")
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .liquidCardBackground(tint: LiquidPalette.blue.opacity(0.18))
+    }
+
+    private var subtitle: String {
+        let savedDate = scenario.savedAt.formatted(date: .abbreviated, time: .shortened)
+        guard let calculation = scenario.calculation else {
+            return "\(scenario.displaySymbol) • saved \(savedDate)"
+        }
+
+        return "\(scenario.displaySymbol) • \(calculation.maximumBuybackPrice.moneyString(currencyCode: calculation.currencyCode)) limit • saved \(savedDate)"
+    }
 }
 
 private struct AssetSuggestionRow: View {
@@ -977,353 +1130,6 @@ private struct StatusRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .liquidCapsuleSurface(tint: message.style == .warning ? .orange : LiquidPalette.blue)
-    }
-}
-
-private enum LiquidPalette {
-    static let accent = Color(red: 0.02, green: 0.66, blue: 0.62)
-    static let blue = Color(red: 0.20, green: 0.38, blue: 0.90)
-    static let amber = Color(red: 0.90, green: 0.58, blue: 0.18)
-    static let ink = Color(red: 0.02, green: 0.08, blue: 0.10)
-}
-
-private struct LiquidGlassBackground: View {
-    var body: some View {
-        ZStack {
-            Color(uiColor: .systemGroupedBackground)
-
-            LinearGradient(
-                colors: [
-                    LiquidPalette.accent.opacity(0.16),
-                    LiquidPalette.blue.opacity(0.08),
-                    LiquidPalette.amber.opacity(0.10),
-                    Color(uiColor: .systemBackground).opacity(0.68)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            VStack(spacing: 0) {
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.22),
-                        LiquidPalette.accent.opacity(0.05),
-                        .clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 280)
-
-                Spacer(minLength: 0)
-
-                LinearGradient(
-                    colors: [
-                        .clear,
-                        LiquidPalette.blue.opacity(0.05),
-                        LiquidPalette.ink.opacity(0.05)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 240)
-            }
-
-            MarketGridOverlay()
-                .opacity(0.42)
-                .blendMode(.softLight)
-        }
-    }
-}
-
-private struct MarketGridOverlay: View {
-    var body: some View {
-        Canvas { context, size in
-            var grid = Path()
-            let rowHeight = max(size.height / 18, 28)
-            var y: CGFloat = 0
-            while y <= size.height {
-                grid.move(to: CGPoint(x: 0, y: y))
-                grid.addLine(to: CGPoint(x: size.width, y: y))
-                y += rowHeight
-            }
-
-            let columnWidth = max(size.width / 9, 42)
-            var x: CGFloat = 0
-            while x <= size.width {
-                grid.move(to: CGPoint(x: x, y: 0))
-                grid.addLine(to: CGPoint(x: x, y: size.height))
-                x += columnWidth
-            }
-
-            context.stroke(grid, with: .color(.white.opacity(0.16)), lineWidth: 0.6)
-
-            var trend = Path()
-            trend.move(to: CGPoint(x: 0, y: size.height * 0.58))
-            trend.addCurve(
-                to: CGPoint(x: size.width, y: size.height * 0.34),
-                control1: CGPoint(x: size.width * 0.25, y: size.height * 0.47),
-                control2: CGPoint(x: size.width * 0.62, y: size.height * 0.68)
-            )
-            context.stroke(trend, with: .color(LiquidPalette.accent.opacity(0.18)), lineWidth: 2)
-        }
-        .allowsHitTesting(false)
-    }
-}
-
-private struct SectionTitle: View {
-    let title: String
-    let systemImage: String
-
-    init(_ title: String, systemImage: String) {
-        self.title = title
-        self.systemImage = systemImage
-    }
-
-    var body: some View {
-        HStack(spacing: 9) {
-            LiquidGlassIcon(systemImage: systemImage, tint: LiquidPalette.accent, size: 30)
-
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(.primary)
-        }
-    }
-}
-
-private struct LiquidGlassIcon: View {
-    let systemImage: String
-    let tint: Color
-    let size: CGFloat
-
-    var body: some View {
-        let shape = Circle()
-
-        Image(systemName: systemImage)
-            .font(.system(size: size * 0.42, weight: .semibold))
-            .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(tint)
-            .frame(width: size, height: size)
-            .background {
-                shape
-                    .fill(tint.opacity(0.12))
-                    .glassEffect(.regular.tint(tint.opacity(0.18)).interactive(), in: shape)
-                    .overlay {
-                        shape.stroke(.white.opacity(0.26), lineWidth: 0.8)
-                    }
-                    .shadow(color: tint.opacity(0.14), radius: 10, y: 4)
-            }
-    }
-}
-
-private struct GlassBadge: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-
-            Text(value)
-                .font(.caption.weight(.bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .liquidCapsuleSurface(tint: LiquidPalette.accent.opacity(0.55))
-    }
-}
-
-private struct MetricTile: View {
-    let title: String
-    let value: String
-    let systemImage: String
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            LiquidGlassIcon(systemImage: systemImage, tint: LiquidPalette.accent, size: 34)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-
-                Text(value)
-                    .font(.headline.monospacedDigit())
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.55)
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
-        .liquidCardBackground(tint: LiquidPalette.accent.opacity(0.28))
-    }
-}
-
-private struct DropGauge: View {
-    let dropPercent: Double
-
-    private var progress: Double {
-        min(max(dropPercent / 40, 0), 1)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Required pullback")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                Text(dropPercent.percentString)
-                    .font(.caption.monospacedDigit().weight(.bold))
-            }
-
-            GeometryReader { proxy in
-                let width = max(10, proxy.size.width * progress)
-
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(.primary.opacity(0.08))
-                        .glassEffect(.regular, in: Capsule())
-
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [LiquidPalette.amber, LiquidPalette.accent],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: width)
-                        .shadow(color: LiquidPalette.accent.opacity(0.28), radius: 8, y: 2)
-                }
-            }
-            .frame(height: 10)
-        }
-    }
-}
-
-private struct LiquidSurface: ViewModifier {
-    let prominent: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .padding(prominent ? 18 : 16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .liquidCardBackground(tint: prominent ? LiquidPalette.accent.opacity(0.52) : LiquidPalette.blue.opacity(0.20), prominent: prominent)
-    }
-}
-
-private struct LiquidCardBackground: ViewModifier {
-    let tint: Color
-    var prominent = false
-
-    func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-
-        content
-            .background {
-                shape
-                    .fill(
-                        prominent
-                            ? LiquidPalette.accent.opacity(0.13)
-                            : Color(uiColor: .secondarySystemGroupedBackground).opacity(0.58)
-                    )
-                    .glassEffect(
-                        prominent ? .regular.tint(tint).interactive() : .regular.tint(tint.opacity(0.45)).interactive(),
-                        in: shape
-                    )
-                    .overlay {
-                        shape.stroke(
-                            LinearGradient(
-                                colors: [.white.opacity(prominent ? 0.38 : 0.24), tint.opacity(0.22), .clear],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 0.8
-                        )
-                    }
-                    .shadow(color: .black.opacity(0.06), radius: prominent ? 18 : 12, y: prominent ? 8 : 5)
-            }
-    }
-}
-
-private struct LiquidFieldSurface: ViewModifier {
-    let isFocused: Bool
-    let isDisabled: Bool
-
-    func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-
-        content
-            .background {
-                shape
-                    .fill(.primary.opacity(isDisabled ? 0.026 : 0.048))
-                    .glassEffect(.regular.tint(LiquidPalette.accent.opacity(isFocused ? 0.16 : 0.06)).interactive(), in: shape)
-                    .overlay {
-                        shape.stroke(
-                            isFocused ? LiquidPalette.accent.opacity(0.62) : .white.opacity(0.16),
-                            lineWidth: isFocused ? 1.2 : 0.7
-                        )
-                    }
-            }
-    }
-}
-
-private struct LiquidCapsuleSurface: ViewModifier {
-    let tint: Color
-
-    func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-
-        content
-            .background {
-                shape
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.48))
-                    .glassEffect(.regular.tint(tint.opacity(0.30)), in: shape)
-                    .overlay {
-                        shape.stroke(.white.opacity(0.18), lineWidth: 0.7)
-                    }
-            }
-    }
-}
-
-private extension View {
-    func liquidSurface(prominent: Bool = false) -> some View {
-        modifier(LiquidSurface(prominent: prominent))
-    }
-
-    func liquidCardBackground(tint: Color, prominent: Bool = false) -> some View {
-        modifier(LiquidCardBackground(tint: tint, prominent: prominent))
-    }
-
-    func liquidFieldSurface(isFocused: Bool = false, isDisabled: Bool = false) -> some View {
-        modifier(LiquidFieldSurface(isFocused: isFocused, isDisabled: isDisabled))
-    }
-
-    func liquidCapsuleSurface(tint: Color) -> some View {
-        modifier(LiquidCapsuleSurface(tint: tint))
-    }
-}
-
-private extension String {
-    var nilIfBlank: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-}
-
-private extension Double {
-    var key: String {
-        String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), self)
     }
 }
 

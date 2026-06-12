@@ -92,6 +92,18 @@ protocol MarketDataClient: Sendable {
     func quote(for asset: MarketAsset) async throws -> MarketQuote
 }
 
+enum MarketDataURLSessionFactory {
+    static let shared: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 8
+        configuration.timeoutIntervalForResource = 14
+        configuration.waitsForConnectivity = false
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = URLCache(memoryCapacity: 1_500_000, diskCapacity: 0)
+        return URLSession(configuration: configuration)
+    }()
+}
+
 struct CompositeMarketDataClient: MarketDataClient {
     let finnhub: FinnhubMarketDataClient
     let openFIGI: OpenFIGIIdentifierResolver
@@ -100,22 +112,43 @@ struct CompositeMarketDataClient: MarketDataClient {
         let cleanedQuery = query.trimmedForDisplay
         guard cleanedQuery.count >= 2 else { return [] }
 
+        var providerErrors: [Error] = []
+
         if cleanedQuery.isLikelyWKN {
-            let mapped = (try? await openFIGI.resolveIdentifier(cleanedQuery, idType: .wkn)) ?? []
-            let mappedMatches = try await enrichMappedAssets(mapped, originalQuery: cleanedQuery)
-            if !mappedMatches.isEmpty {
-                return mappedMatches
+            do {
+                let mapped = try await openFIGI.resolveIdentifier(cleanedQuery, idType: .wkn)
+                let mappedMatches = try await enrichMappedAssets(mapped, originalQuery: cleanedQuery)
+                if !mappedMatches.isEmpty {
+                    return mappedMatches
+                }
+            } catch {
+                providerErrors.append(error)
             }
         }
 
-        let directMatches = (try? await finnhub.searchAssets(query: cleanedQuery)) ?? []
-        if !directMatches.isEmpty {
-            return directMatches
+        do {
+            let directMatches = try await finnhub.searchAssets(query: cleanedQuery)
+            if !directMatches.isEmpty {
+                return directMatches
+            }
+        } catch {
+            providerErrors.append(error)
         }
 
         if cleanedQuery.isLikelyISIN {
-            let mapped = (try? await openFIGI.resolveIdentifier(cleanedQuery, idType: .isin)) ?? []
-            return try await enrichMappedAssets(mapped, originalQuery: cleanedQuery)
+            do {
+                let mapped = try await openFIGI.resolveIdentifier(cleanedQuery, idType: .isin)
+                let mappedMatches = try await enrichMappedAssets(mapped, originalQuery: cleanedQuery)
+                if !mappedMatches.isEmpty {
+                    return mappedMatches
+                }
+            } catch {
+                providerErrors.append(error)
+            }
+        }
+
+        if let actionableError = providerErrors.actionableMarketDataError {
+            throw actionableError
         }
 
         throw MarketDataError.noResults
@@ -160,7 +193,7 @@ struct FinnhubMarketDataClient: MarketDataClient {
     let apiKey: String
     let urlSession: URLSession
 
-    init(apiKey: String, urlSession: URLSession = .shared) {
+    init(apiKey: String, urlSession: URLSession = MarketDataURLSessionFactory.shared) {
         self.apiKey = apiKey.trimmedForDisplay
         self.urlSession = urlSession
     }
@@ -268,7 +301,7 @@ struct OpenFIGIIdentifierResolver: Sendable {
     let apiKey: String?
     let urlSession: URLSession
 
-    init(apiKey: String? = nil, urlSession: URLSession = .shared) {
+    init(apiKey: String? = nil, urlSession: URLSession = MarketDataURLSessionFactory.shared) {
         self.apiKey = apiKey?.trimmedForDisplay.nilIfEmpty
         self.urlSession = urlSession
     }
@@ -347,13 +380,23 @@ enum MarketDataClientFactory {
         openFIGIAPIKey: String?,
         bundle: Bundle = .main
     ) -> CompositeMarketDataClient? {
-        guard let resolvedFinnhubAPIKey = sanitizedAPIKey(finnhubAPIKey) ?? apiKey(named: "FINNHUB_API_KEY", bundle: bundle) else {
+        let savedFinnhubAPIKey = try? APIKeyStore.string(for: .finnhub)
+        let savedOpenFIGIAPIKey = try? APIKeyStore.string(for: .openFIGI)
+
+        guard let resolvedFinnhubAPIKey = sanitizedAPIKey(finnhubAPIKey)
+            ?? sanitizedAPIKey(savedFinnhubAPIKey)
+            ?? apiKey(named: "FINNHUB_API_KEY", bundle: bundle)
+        else {
             return nil
         }
 
         return CompositeMarketDataClient(
             finnhub: FinnhubMarketDataClient(apiKey: resolvedFinnhubAPIKey),
-            openFIGI: OpenFIGIIdentifierResolver(apiKey: sanitizedAPIKey(openFIGIAPIKey) ?? apiKey(named: "OPENFIGI_API_KEY", bundle: bundle))
+            openFIGI: OpenFIGIIdentifierResolver(
+                apiKey: sanitizedAPIKey(openFIGIAPIKey)
+                    ?? sanitizedAPIKey(savedOpenFIGIAPIKey)
+                    ?? apiKey(named: "OPENFIGI_API_KEY", bundle: bundle)
+            )
         )
     }
 
@@ -443,6 +486,23 @@ private extension Array where Element == MarketAsset {
     func uniquedByID() -> [MarketAsset] {
         var seen = Set<String>()
         return filter { seen.insert($0.id).inserted }
+    }
+}
+
+private extension Array where Element == Error {
+    var actionableMarketDataError: Error? {
+        first { error in
+            guard let marketDataError = error as? MarketDataError else {
+                return true
+            }
+
+            switch marketDataError {
+            case .noResults, .quoteUnavailable:
+                return false
+            case .missingAPIKey, .invalidURL, .rateLimited, .badStatusCode, .invalidResponse:
+                return true
+            }
+        }
     }
 }
 

@@ -1,12 +1,15 @@
 import Foundation
 
-struct BuybackInputs: Equatable, Sendable {
+struct BuybackInputs: Codable, Equatable, Sendable {
     var symbol: String
     var sharesToSell: Double
     var averageCostBasis: Double
     var sellPrice: Double
     var taxRatePercent: Double
     var targetExtraSharesPercent: Double
+    var sellFeeTotal: Double
+    var buyFeeTotal: Double
+    var slippagePercent: Double
     var currencyCode: String
 
     init(
@@ -16,6 +19,9 @@ struct BuybackInputs: Equatable, Sendable {
         sellPrice: Double = BuybackCalculator.defaultSellPrice,
         taxRatePercent: Double = BuybackCalculator.fixedTaxRatePercent,
         targetExtraSharesPercent: Double = BuybackCalculator.fixedTargetExtraSharesPercent,
+        sellFeeTotal: Double = BuybackCalculator.defaultSellFeeTotal,
+        buyFeeTotal: Double = BuybackCalculator.defaultBuyFeeTotal,
+        slippagePercent: Double = BuybackCalculator.defaultSlippagePercent,
         currencyCode: String = BuybackCalculator.defaultCurrencyCode
     ) {
         self.symbol = symbol.normalizedStockSymbol
@@ -24,6 +30,9 @@ struct BuybackInputs: Equatable, Sendable {
         self.sellPrice = sellPrice
         self.taxRatePercent = taxRatePercent
         self.targetExtraSharesPercent = targetExtraSharesPercent
+        self.sellFeeTotal = sellFeeTotal
+        self.buyFeeTotal = buyFeeTotal
+        self.slippagePercent = slippagePercent
         self.currencyCode = currencyCode.normalizedCurrencyCode
     }
 }
@@ -37,6 +46,9 @@ struct BuybackCalculation: Equatable, Identifiable, Sendable {
             sellPrice.keyString,
             taxRatePercent.keyString,
             targetExtraSharesPercent.keyString,
+            sellFeeTotal.keyString,
+            buyFeeTotal.keyString,
+            slippagePercent.keyString,
             currencyCode
         ].joined(separator: "-")
     }
@@ -48,15 +60,20 @@ struct BuybackCalculation: Equatable, Identifiable, Sendable {
     let gainAtSellPercent: Double
     let taxRatePercent: Double
     let targetExtraSharesPercent: Double
+    let sellFeeTotal: Double
+    let buyFeeTotal: Double
+    let slippagePercent: Double
     let currencyCode: String
 
     let costBasisTotal: Double
     let grossProceeds: Double
+    let netSaleProceeds: Double
     let taxableGainPerShare: Double
     let taxableGainTotal: Double
     let taxAmount: Double
     let afterTaxCash: Double
     let afterTaxCashPerShare: Double
+    let cashAvailableForBuyback: Double
     let targetSharesPerSoldShare: Double
     let targetShareCount: Double
     let extraShareTarget: Double
@@ -101,6 +118,9 @@ enum BuybackCalculator {
     static let defaultCurrencyCode = "USD"
     static let fixedTaxRatePercent: Double = 27
     static let fixedTargetExtraSharesPercent: Double = 2.5
+    static let defaultSellFeeTotal: Double = 0
+    static let defaultBuyFeeTotal: Double = 0
+    static let defaultSlippagePercent: Double = 0
 
     static var defaultInputs: BuybackInputs {
         BuybackInputs()
@@ -118,6 +138,9 @@ enum BuybackCalculator {
             sellPrice: inputs.sellPrice,
             taxRatePercent: inputs.taxRatePercent,
             targetExtraSharesPercent: inputs.targetExtraSharesPercent,
+            sellFeeTotal: inputs.sellFeeTotal,
+            buyFeeTotal: inputs.buyFeeTotal,
+            slippagePercent: inputs.slippagePercent,
             currencyCode: inputs.currencyCode
         )
     }
@@ -129,6 +152,9 @@ enum BuybackCalculator {
         sellPrice: Double,
         taxRatePercent: Double = fixedTaxRatePercent,
         targetExtraSharesPercent: Double = fixedTargetExtraSharesPercent,
+        sellFeeTotal: Double = defaultSellFeeTotal,
+        buyFeeTotal: Double = defaultBuyFeeTotal,
+        slippagePercent: Double = defaultSlippagePercent,
         currencyCode: String = defaultCurrencyCode
     ) -> BuybackCalculation? {
         guard sharesToSell.isFinite,
@@ -136,12 +162,18 @@ enum BuybackCalculator {
               sellPrice.isFinite,
               taxRatePercent.isFinite,
               targetExtraSharesPercent.isFinite,
+              sellFeeTotal.isFinite,
+              buyFeeTotal.isFinite,
+              slippagePercent.isFinite,
               sharesToSell > 0,
               averageCostBasis > 0,
               sellPrice > 0,
               taxRatePercent >= 0,
               taxRatePercent <= 100,
-              targetExtraSharesPercent >= 0
+              targetExtraSharesPercent >= 0,
+              sellFeeTotal >= 0,
+              buyFeeTotal >= 0,
+              slippagePercent >= 0
         else {
             return nil
         }
@@ -149,15 +181,19 @@ enum BuybackCalculator {
         let normalizedSymbol = symbol.normalizedStockSymbol
         let normalizedCurrencyCode = currencyCode.normalizedCurrencyCode
         let gainAtSellPercent = ((sellPrice - averageCostBasis) / averageCostBasis) * 100
-        let taxableGainPerShare = max(0, sellPrice - averageCostBasis)
-        let taxableGainTotal = taxableGainPerShare * sharesToSell
-        let taxAmount = taxableGainTotal * taxRatePercent / 100
+        let costBasisTotal = averageCostBasis * sharesToSell
         let grossProceeds = sellPrice * sharesToSell
-        let afterTaxCash = grossProceeds - taxAmount
+        let netSaleProceeds = grossProceeds - sellFeeTotal
+        let taxableGainTotal = max(0, netSaleProceeds - costBasisTotal)
+        let taxableGainPerShare = taxableGainTotal / sharesToSell
+        let taxAmount = taxableGainTotal * taxRatePercent / 100
+        let afterTaxCash = netSaleProceeds - taxAmount
         let afterTaxCashPerShare = afterTaxCash / sharesToSell
+        let cashAvailableForBuyback = max(0, afterTaxCash - buyFeeTotal)
         let targetSharesPerSoldShare = 1 + targetExtraSharesPercent / 100
         let targetShareCount = sharesToSell * targetSharesPerSoldShare
-        let maximumBuybackPrice = afterTaxCash / targetShareCount
+        let slippageMultiplier = 1 + slippagePercent / 100
+        let maximumBuybackPrice = cashAvailableForBuyback / targetShareCount / slippageMultiplier
         let requiredDropPercent = ((sellPrice - maximumBuybackPrice) / sellPrice) * 100
 
         return BuybackCalculation(
@@ -168,14 +204,19 @@ enum BuybackCalculator {
             gainAtSellPercent: gainAtSellPercent,
             taxRatePercent: taxRatePercent,
             targetExtraSharesPercent: targetExtraSharesPercent,
+            sellFeeTotal: sellFeeTotal,
+            buyFeeTotal: buyFeeTotal,
+            slippagePercent: slippagePercent,
             currencyCode: normalizedCurrencyCode,
-            costBasisTotal: averageCostBasis * sharesToSell,
+            costBasisTotal: costBasisTotal,
             grossProceeds: grossProceeds,
+            netSaleProceeds: netSaleProceeds,
             taxableGainPerShare: taxableGainPerShare,
             taxableGainTotal: taxableGainTotal,
             taxAmount: taxAmount,
             afterTaxCash: afterTaxCash,
             afterTaxCashPerShare: afterTaxCashPerShare,
+            cashAvailableForBuyback: cashAvailableForBuyback,
             targetSharesPerSoldShare: targetSharesPerSoldShare,
             targetShareCount: targetShareCount,
             extraShareTarget: targetShareCount - sharesToSell,
@@ -191,6 +232,9 @@ enum BuybackCalculator {
         sharesToSell: Double = 1,
         taxRatePercent: Double = fixedTaxRatePercent,
         targetExtraSharesPercent: Double = fixedTargetExtraSharesPercent,
+        sellFeeTotal: Double = defaultSellFeeTotal,
+        buyFeeTotal: Double = defaultBuyFeeTotal,
+        slippagePercent: Double = defaultSlippagePercent,
         currencyCode: String = defaultCurrencyCode
     ) -> BuybackCalculation? {
         guard gainAtSellPercent.isFinite,
@@ -206,6 +250,9 @@ enum BuybackCalculator {
             sellPrice: sellPrice,
             taxRatePercent: taxRatePercent,
             targetExtraSharesPercent: targetExtraSharesPercent,
+            sellFeeTotal: sellFeeTotal,
+            buyFeeTotal: buyFeeTotal,
+            slippagePercent: slippagePercent,
             currencyCode: currencyCode
         )
     }
@@ -243,6 +290,18 @@ enum BuybackCalculator {
 
         guard inputs.targetExtraSharesPercent >= 0 else {
             return "Target extra shares must be 0% or higher."
+        }
+
+        guard inputs.sellFeeTotal >= 0 else {
+            return "Sell fees must be 0 or higher."
+        }
+
+        guard inputs.buyFeeTotal >= 0 else {
+            return "Buy fees must be 0 or higher."
+        }
+
+        guard inputs.slippagePercent >= 0 else {
+            return "Slippage must be 0% or higher."
         }
 
         return nil

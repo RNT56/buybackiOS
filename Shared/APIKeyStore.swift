@@ -31,9 +31,49 @@ enum APIKeyStoreError: Error, LocalizedError {
 
 enum APIKeyStore {
     private static let service = "com.schtack.BuybackCalculator.apiKeys"
+    private static let sharedAccessGroupIdentifier = "com.schtack.BuybackCalculator.apiKeys"
 
     static func string(for kind: APIKeyKind) throws -> String? {
-        var query = baseQuery(for: kind)
+        if let accessGroup = sharedAccessGroup,
+           let value = try string(for: kind, accessGroup: accessGroup) {
+            return value
+        }
+
+        return try string(for: kind, accessGroup: nil)
+    }
+
+    static func set(_ value: String?, for kind: APIKeyKind) throws {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else {
+            try delete(kind)
+            return
+        }
+
+        if let accessGroup = sharedAccessGroup {
+            try set(trimmed, for: kind, accessGroup: accessGroup)
+            try? delete(kind, accessGroup: nil)
+        } else {
+            try set(trimmed, for: kind, accessGroup: nil)
+        }
+    }
+
+    static func delete(_ kind: APIKeyKind) throws {
+        var firstError: Error?
+        for accessGroup in [sharedAccessGroup, nil] {
+            do {
+                try delete(kind, accessGroup: accessGroup)
+            } catch {
+                firstError = firstError ?? error
+            }
+        }
+
+        if let firstError {
+            throw firstError
+        }
+    }
+
+    private static func string(for kind: APIKeyKind, accessGroup: String?) throws -> String? {
+        var query = baseQuery(for: kind, accessGroup: accessGroup)
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         query[kSecReturnData as String] = true
 
@@ -55,15 +95,9 @@ enum APIKeyStore {
         }
     }
 
-    static func set(_ value: String?, for kind: APIKeyKind) throws {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else {
-            try delete(kind)
-            return
-        }
-
-        let data = Data(trimmed.utf8)
-        let query = baseQuery(for: kind)
+    private static func set(_ value: String, for kind: APIKeyKind, accessGroup: String?) throws {
+        let data = Data(value.utf8)
+        let query = baseQuery(for: kind, accessGroup: accessGroup)
         let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
@@ -87,81 +121,39 @@ enum APIKeyStore {
         }
     }
 
-    static func delete(_ kind: APIKeyKind) throws {
-        let status = SecItemDelete(baseQuery(for: kind) as CFDictionary)
+    private static func delete(_ kind: APIKeyKind, accessGroup: String?) throws {
+        let status = SecItemDelete(baseQuery(for: kind, accessGroup: accessGroup) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw APIKeyStoreError.unhandledStatus(status)
         }
     }
 
-    private static func baseQuery(for kind: APIKeyKind) -> [String: Any] {
-        [
+    private static func baseQuery(for kind: APIKeyKind, accessGroup: String?) -> [String: Any] {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: kind.rawValue
         ]
-    }
-}
 
-@MainActor
-final class APIKeySettingsViewModel: ObservableObject {
-    @Published var finnhubAPIKey = ""
-    @Published var openFIGIAPIKey = ""
-    @Published var statusMessage: String?
-
-    var effectiveFinnhubAPIKey: String? {
-        MarketDataClientFactory.sanitizedAPIKey(finnhubAPIKey)
-    }
-
-    var effectiveOpenFIGIAPIKey: String? {
-        MarketDataClientFactory.sanitizedAPIKey(openFIGIAPIKey)
-    }
-
-    var hasRuntimeFinnhubAPIKey: Bool {
-        effectiveFinnhubAPIKey != nil
-    }
-
-    var hasBundledFinnhubAPIKey: Bool {
-        MarketDataClientFactory.apiKey(named: "FINNHUB_API_KEY") != nil
-    }
-
-    var hasUsableFinnhubAPIKey: Bool {
-        hasRuntimeFinnhubAPIKey || hasBundledFinnhubAPIKey
-    }
-
-    init() {
-        load()
-    }
-
-    func load() {
-        do {
-            finnhubAPIKey = try APIKeyStore.string(for: .finnhub) ?? ""
-            openFIGIAPIKey = try APIKeyStore.string(for: .openFIGI) ?? ""
-            statusMessage = nil
-        } catch {
-            statusMessage = error.localizedDescription
+        if let accessGroup {
+            query[kSecAttrAccessGroup as String] = accessGroup
         }
+
+        return query
     }
 
-    func save() {
-        do {
-            try APIKeyStore.set(finnhubAPIKey, for: .finnhub)
-            try APIKeyStore.set(openFIGIAPIKey, for: .openFIGI)
-            load()
-            statusMessage = "API keys saved."
-        } catch {
-            statusMessage = error.localizedDescription
+    private static var sharedAccessGroup: String? {
+        guard let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String else {
+            return nil
         }
-    }
 
-    func clear() {
-        do {
-            try APIKeyStore.delete(.finnhub)
-            try APIKeyStore.delete(.openFIGI)
-            load()
-            statusMessage = "API keys cleared."
-        } catch {
-            statusMessage = error.localizedDescription
+        let trimmedPrefix = prefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrefix.isEmpty,
+              !trimmedPrefix.hasPrefix("$(")
+        else {
+            return nil
         }
+
+        return trimmedPrefix + sharedAccessGroupIdentifier
     }
 }

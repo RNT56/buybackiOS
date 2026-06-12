@@ -14,6 +14,21 @@ struct BuybackWidgetConfiguration: WidgetConfigurationIntent {
 
     @Parameter(title: "Fallback Price", default: 185.0)
     var fallbackSellPrice: Double
+
+    @Parameter(title: "Tax Rate %", default: 27.0)
+    var taxRatePercent: Double
+
+    @Parameter(title: "Extra Shares Target %", default: 2.5)
+    var targetExtraSharesPercent: Double
+
+    @Parameter(title: "Sell Fees", default: 0.0)
+    var sellFeeTotal: Double
+
+    @Parameter(title: "Buy Fees", default: 0.0)
+    var buyFeeTotal: Double
+
+    @Parameter(title: "Slippage %", default: 0.0)
+    var slippagePercent: Double
 }
 
 struct BuybackEntry: TimelineEntry, Sendable {
@@ -103,6 +118,11 @@ struct BuybackProvider: AppIntentTimelineProvider {
                 sellPrice: quote.price,
                 gainAtSellPercent: configuration.gainAtSellPercent,
                 sharesToSell: 1,
+                taxRatePercent: configuration.taxRatePercent,
+                targetExtraSharesPercent: configuration.targetExtraSharesPercent,
+                sellFeeTotal: configuration.sellFeeTotal,
+                buyFeeTotal: configuration.buyFeeTotal,
+                slippagePercent: configuration.slippagePercent,
                 currencyCode: quote.currencyCode
             )
 
@@ -135,6 +155,11 @@ struct BuybackProvider: AppIntentTimelineProvider {
             sellPrice: configuration.fallbackSellPrice,
             gainAtSellPercent: configuration.gainAtSellPercent,
             sharesToSell: 1,
+            taxRatePercent: configuration.taxRatePercent,
+            targetExtraSharesPercent: configuration.targetExtraSharesPercent,
+            sellFeeTotal: configuration.sellFeeTotal,
+            buyFeeTotal: configuration.buyFeeTotal,
+            slippagePercent: configuration.slippagePercent,
             currencyCode: BuybackCalculator.defaultCurrencyCode
         )
 
@@ -151,7 +176,20 @@ struct BuybackProvider: AppIntentTimelineProvider {
 
     private func fallbackReason(for error: Error) -> String {
         if let marketDataError = error as? MarketDataError {
-            return marketDataError.localizedDescription
+            switch marketDataError {
+            case .missingAPIKey:
+                return "Missing key"
+            case .rateLimited:
+                return "Rate limit"
+            case .noResults:
+                return "No result"
+            case .quoteUnavailable:
+                return "No quote"
+            case .badStatusCode(let statusCode):
+                return "HTTP \(statusCode)"
+            case .invalidURL, .invalidResponse:
+                return "Data error"
+            }
         }
         return "Quote unavailable"
     }
@@ -175,6 +213,24 @@ struct BuybackWidgetEntryView: View {
         .containerBackground(for: .widget) {
             BuybackWidgetBackground()
         }
+        .widgetURL(deepLinkURL)
+    }
+
+    private var deepLinkURL: URL? {
+        var components = URLComponents()
+        components.scheme = "buybackcalculator"
+        components.host = "calculator"
+        components.queryItems = [
+            URLQueryItem(name: "symbol", value: entry.symbol),
+            URLQueryItem(name: "price", value: activePrice.inputString),
+            URLQueryItem(name: "gain", value: entry.gainAtSellPercent.inputString),
+            URLQueryItem(name: "fallbackPrice", value: entry.fallbackSellPrice.inputString)
+        ]
+        return components.url
+    }
+
+    private var activePrice: Double {
+        entry.quote?.price ?? entry.fallbackSellPrice
     }
 
     @ViewBuilder

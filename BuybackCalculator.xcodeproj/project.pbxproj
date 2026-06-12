@@ -8,25 +8,33 @@
 
 /* Begin PBXBuildFile section */
 		0A99E46343CEDF3211128FBD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6785E099B7FF142D3008D84C /* SwiftUI.framework */; };
+		38E7D79E640338E356CA3296 /* APIKeySettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE29427837444F02BDFC7FFA /* APIKeySettingsViewModel.swift */; };
 		4B7F0D6ACA90354527CFC923 /* BuybackCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */; };
 		4FAFA4E7CD8A75579BFCC719 /* MarketData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E643154B019D90FC0941E9C1 /* MarketData.swift */; };
 		524F16A4D3C227E234E190B0 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFABE4509A82FB113137375D /* Security.framework */; };
 		542490B7D82C13FD76255F2A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7B5A18387FBCDCE5D53C80DA /* Assets.xcassets */; };
+		5599C4B7A9307A1F6D0F8DF2 /* APIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */; };
+		5A390E8B67991CD5698F05D8 /* LiquidDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189BA55F9DAF4FC8AD7562F9 /* LiquidDesignSystem.swift */; };
 		6544D8267A015C0494F21F2D /* BuybackWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB028776A73BE604AEAAC97D /* BuybackWidgetBundle.swift */; };
 		7E178733C94072F6DE80E2C3 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C61C47619D047D304308EDAC /* AppIntents.framework */; };
 		848D1E54C82A645B489A2116 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 534D387D11194BB2A7445011 /* ContentView.swift */; };
 		84C61354184B6590A0069E04 /* BuybackWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF47E5B51DDBE7E768F383C8 /* BuybackWidget.swift */; };
+		8930030788DD2D1A976ED011 /* MarketLookupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F8E8B6BB7E95AA7B677FA7 /* MarketLookupViewModel.swift */; };
 		8FBBB367F886BF37CF65921D /* MarketData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E643154B019D90FC0941E9C1 /* MarketData.swift */; };
 		9C43BB2052E8F8063FC23868 /* MarketDataDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C73DBB82C05FB182807F6319 /* MarketDataDecodingTests.swift */; };
 		9E29383603E54BF2D3E55179 /* BuybackCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */; };
 		A485769F798E7E5921624D23 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 018DC9398D8BC71964C4E26F /* WidgetKit.framework */; };
+		A531D215B745200951AE3E39 /* APIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */; };
 		BF2DEDB6FC4A147CF4C7E56D /* BuybackCalculationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BBAC552BCC1BEBE64ECE84 /* BuybackCalculationTests.swift */; };
 		CDFA8BD27BB5E2CD6E69A0EB /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0977B432A10A098ADAE37C /* XCTest.framework */; };
 		CFC04F61CC36C451FF237949 /* BuybackCalculatorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D69F740B5DAE7D338D5F43ED /* BuybackCalculatorApp.swift */; };
+		D2E6D365418EAF098E7A1D8F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFABE4509A82FB113137375D /* Security.framework */; };
+		D612706C64EED2309AF7D74B /* SavedScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68EC6D3188088D7B7FFF4391 /* SavedScenarios.swift */; };
+		D6ACAC800AC6B87321695503 /* APIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */; };
 		D9B15564FAD34DCCE402C7FC /* BuybackWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C9A76E0F6F0282BB7918DABD /* BuybackWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DAE5A6CFA8552024FF0F219A /* BuybackCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */; };
 		E8903FCD09A680C72C15796D /* MarketData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E643154B019D90FC0941E9C1 /* MarketData.swift */; };
-		FE9B30E15BA6DD5F0C35FEA0 /* APIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77B46B7D7A1FA3803B0E47E /* APIKeyStore.swift */; };
+		FFCE25C9274736BB75B946AC /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFABE4509A82FB113137375D /* Security.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -55,12 +63,17 @@
 
 /* Begin PBXFileReference section */
 		018DC9398D8BC71964C4E26F /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		189BA55F9DAF4FC8AD7562F9 /* LiquidDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidDesignSystem.swift; sourceTree = "<group>"; };
 		18BBAC552BCC1BEBE64ECE84 /* BuybackCalculationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackCalculationTests.swift; sourceTree = "<group>"; };
 		230F0FF232DC32042FCA664D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		486C443C56801C9AC87C1704 /* BuybackCalculatorTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BuybackCalculatorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		48F8E8B6BB7E95AA7B677FA7 /* MarketLookupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketLookupViewModel.swift; sourceTree = "<group>"; };
 		4FE1E79C7C2503D3DE6D566E /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
+		4FE9ED321E3130F4B6F12393 /* BuybackWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BuybackWidgetExtension.entitlements; sourceTree = "<group>"; };
 		534D387D11194BB2A7445011 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		65362EB1BCE655483C5C644A /* BuybackCalculator.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BuybackCalculator.entitlements; sourceTree = "<group>"; };
 		6785E099B7FF142D3008D84C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		68EC6D3188088D7B7FFF4391 /* SavedScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedScenarios.swift; sourceTree = "<group>"; };
 		7B5A18387FBCDCE5D53C80DA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		986F0FFCBDD4FA1E16581E9F /* BuybackCalculator.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BuybackCalculator.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0977B432A10A098ADAE37C /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
@@ -72,8 +85,9 @@
 		CB028776A73BE604AEAAC97D /* BuybackWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackWidgetBundle.swift; sourceTree = "<group>"; };
 		D69F740B5DAE7D338D5F43ED /* BuybackCalculatorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackCalculatorApp.swift; sourceTree = "<group>"; };
 		E643154B019D90FC0941E9C1 /* MarketData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketData.swift; sourceTree = "<group>"; };
-		E77B46B7D7A1FA3803B0E47E /* APIKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyStore.swift; sourceTree = "<group>"; };
+		EE29427837444F02BDFC7FFA /* APIKeySettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeySettingsViewModel.swift; sourceTree = "<group>"; };
 		F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackCalculator.swift; sourceTree = "<group>"; };
+		FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyStore.swift; sourceTree = "<group>"; };
 		FF47E5B51DDBE7E768F383C8 /* BuybackWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackWidget.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -85,6 +99,7 @@
 				0A99E46343CEDF3211128FBD /* SwiftUI.framework in Frameworks */,
 				A485769F798E7E5921624D23 /* WidgetKit.framework in Frameworks */,
 				7E178733C94072F6DE80E2C3 /* AppIntents.framework in Frameworks */,
+				FFCE25C9274736BB75B946AC /* Security.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -101,6 +116,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CDFA8BD27BB5E2CD6E69A0EB /* XCTest.framework in Frameworks */,
+				D2E6D365418EAF098E7A1D8F /* Security.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -163,6 +179,7 @@
 		A8F9969D014D66579C87F356 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */,
 				F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */,
 				E643154B019D90FC0941E9C1 /* MarketData.swift */,
 			);
@@ -174,6 +191,7 @@
 			children = (
 				FF47E5B51DDBE7E768F383C8 /* BuybackWidget.swift */,
 				CB028776A73BE604AEAAC97D /* BuybackWidgetBundle.swift */,
+				4FE9ED321E3130F4B6F12393 /* BuybackWidgetExtension.entitlements */,
 				AC1276D19EC214963E9DAFA9 /* Info.plist */,
 			);
 			path = BuybackWidgetExtension;
@@ -182,10 +200,14 @@
 		DBD30D6643321899E3AC61BD /* BuybackCalculatorApp */ = {
 			isa = PBXGroup;
 			children = (
-				E77B46B7D7A1FA3803B0E47E /* APIKeyStore.swift */,
+				EE29427837444F02BDFC7FFA /* APIKeySettingsViewModel.swift */,
+				65362EB1BCE655483C5C644A /* BuybackCalculator.entitlements */,
 				D69F740B5DAE7D338D5F43ED /* BuybackCalculatorApp.swift */,
 				534D387D11194BB2A7445011 /* ContentView.swift */,
 				230F0FF232DC32042FCA664D /* Info.plist */,
+				189BA55F9DAF4FC8AD7562F9 /* LiquidDesignSystem.swift */,
+				48F8E8B6BB7E95AA7B677FA7 /* MarketLookupViewModel.swift */,
+				68EC6D3188088D7B7FFF4391 /* SavedScenarios.swift */,
 			);
 			path = BuybackCalculatorApp;
 			sourceTree = "<group>";
@@ -298,11 +320,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FE9B30E15BA6DD5F0C35FEA0 /* APIKeyStore.swift in Sources */,
+				38E7D79E640338E356CA3296 /* APIKeySettingsViewModel.swift in Sources */,
+				5599C4B7A9307A1F6D0F8DF2 /* APIKeyStore.swift in Sources */,
 				4B7F0D6ACA90354527CFC923 /* BuybackCalculator.swift in Sources */,
 				CFC04F61CC36C451FF237949 /* BuybackCalculatorApp.swift in Sources */,
 				848D1E54C82A645B489A2116 /* ContentView.swift in Sources */,
+				5A390E8B67991CD5698F05D8 /* LiquidDesignSystem.swift in Sources */,
 				4FAFA4E7CD8A75579BFCC719 /* MarketData.swift in Sources */,
+				8930030788DD2D1A976ED011 /* MarketLookupViewModel.swift in Sources */,
+				D612706C64EED2309AF7D74B /* SavedScenarios.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -310,6 +336,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A531D215B745200951AE3E39 /* APIKeyStore.swift in Sources */,
 				BF2DEDB6FC4A147CF4C7E56D /* BuybackCalculationTests.swift in Sources */,
 				9E29383603E54BF2D3E55179 /* BuybackCalculator.swift in Sources */,
 				E8903FCD09A680C72C15796D /* MarketData.swift in Sources */,
@@ -321,6 +348,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D6ACAC800AC6B87321695503 /* APIKeyStore.swift in Sources */,
 				DAE5A6CFA8552024FF0F219A /* BuybackCalculator.swift in Sources */,
 				84C61354184B6590A0069E04 /* BuybackWidget.swift in Sources */,
 				6544D8267A015C0494F21F2D /* BuybackWidgetBundle.swift in Sources */,
@@ -343,6 +371,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -362,6 +391,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BuybackCalculatorApp/BuybackCalculator.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = BuybackCalculatorApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -381,6 +411,7 @@
 			baseConfigurationReference = 4FE1E79C7C2503D3DE6D566E /* Secrets.xcconfig */;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = BuybackWidgetExtension/BuybackWidgetExtension.entitlements;
 				INFOPLIST_FILE = BuybackWidgetExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -467,6 +498,7 @@
 			baseConfigurationReference = 4FE1E79C7C2503D3DE6D566E /* Secrets.xcconfig */;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = BuybackWidgetExtension/BuybackWidgetExtension.entitlements;
 				INFOPLIST_FILE = BuybackWidgetExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -487,6 +519,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BuybackCalculatorApp/BuybackCalculator.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = BuybackCalculatorApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -505,6 +538,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

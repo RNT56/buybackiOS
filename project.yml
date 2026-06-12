@@ -29,10 +29,20 @@ targets:
       - target: BuybackWidgetExtension
         embed: true
       - sdk: Security.framework
+    entitlements:
+      path: BuybackCalculatorApp/BuybackCalculator.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.schtack.BuybackCalculator.apiKeys
     info:
       path: BuybackCalculatorApp/Info.plist
       properties:
         CFBundleDisplayName: Buyback Calculator
+        CFBundleURLTypes:
+          - CFBundleURLName: com.schtack.BuybackCalculator
+            CFBundleURLSchemes:
+              - buybackcalculator
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
         FINNHUB_API_KEY: $(FINNHUB_API_KEY)
         OPENFIGI_API_KEY: $(OPENFIGI_API_KEY)
         UILaunchScreen: {}
@@ -58,10 +68,17 @@ targets:
       - sdk: SwiftUI.framework
       - sdk: WidgetKit.framework
       - sdk: AppIntents.framework
+      - sdk: Security.framework
+    entitlements:
+      path: BuybackWidgetExtension/BuybackWidgetExtension.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.schtack.BuybackCalculator.apiKeys
     info:
       path: BuybackWidgetExtension/Info.plist
       properties:
         CFBundleDisplayName: Buyback Widget
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
         FINNHUB_API_KEY: $(FINNHUB_API_KEY)
         OPENFIGI_API_KEY: $(OPENFIGI_API_KEY)
         NSExtension:
@@ -81,10 +98,12 @@ targets:
       - path: Shared
     dependencies:
       - sdk: XCTest.framework
+      - sdk: Security.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.schtack.BuybackCalculatorTests
         PRODUCT_NAME: BuybackCalculatorTests
+        GENERATE_INFOPLIST_FILE: YES
 schemes:
   BuybackCalculator:
     build:
