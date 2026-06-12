@@ -59,16 +59,42 @@ struct BuybackIcon: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                ForEach(Array(BuybackIconDrawing.commands(for: kind, size: proxy.size, lineScale: lineScale).enumerated()), id: \.offset) { _, command in
-                    command.view(tint: tint)
-                }
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
+        ZStack {
+            BuybackIconLayerShape(kind: kind, lineScale: lineScale, layer: .fill)
+                .fill(tint.opacity(0.78))
+
+            BuybackIconLayerShape(kind: kind, lineScale: lineScale, layer: .stroke)
+                .fill(tint)
         }
         .aspectRatio(1, contentMode: .fit)
         .accessibilityHidden(true)
+    }
+}
+
+private struct BuybackIconLayerShape: Shape {
+    enum Layer {
+        case fill
+        case stroke
+    }
+
+    let kind: BuybackIconKind
+    let lineScale: CGFloat
+    let layer: Layer
+
+    func path(in rect: CGRect) -> Path {
+        let paths = BuybackIconDrawing.paths(for: kind, size: rect.size, lineScale: lineScale)
+
+        let path: Path
+        switch layer {
+        case .fill:
+            path = paths.fillPath
+        case .stroke:
+            path = paths.strokePath.strokedPath(
+                StrokeStyle(lineWidth: paths.lineWidth, lineCap: .round, lineJoin: .round)
+            )
+        }
+
+        return path.applying(CGAffineTransform(translationX: rect.minX, y: rect.minY))
     }
 }
 
@@ -100,16 +126,18 @@ struct IconLabel: View {
 }
 
 private enum BuybackIconDrawing {
-    static func commands(
+    static func paths(
         for kind: BuybackIconKind,
         size: CGSize,
         lineScale: CGFloat
-    ) -> [IconDrawCommand] {
-        var commands: [IconDrawCommand] = []
+    ) -> IconDrawPaths {
+        var paths = IconDrawPaths(lineWidth: max(min(size.width, size.height) * 0.075 * lineScale, 1.35))
+
         draw(kind, size: size, lineScale: lineScale) { command in
-            commands.append(command)
+            paths.append(command)
         }
-        return commands
+
+        return paths
     }
 
     private static func draw(
@@ -460,17 +488,19 @@ private struct IconDrawCommand {
     static func fill(_ path: Path, opacity: Double) -> IconDrawCommand {
         IconDrawCommand(kind: .fill, path: path, opacity: opacity)
     }
+}
 
-    @ViewBuilder
-    func view(tint: Color) -> some View {
-        switch kind {
-        case .stroke(let width):
-            path.stroke(
-                tint.opacity(opacity),
-                style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
-            )
+private struct IconDrawPaths {
+    var fillPath = Path()
+    var strokePath = Path()
+    let lineWidth: CGFloat
+
+    mutating func append(_ command: IconDrawCommand) {
+        switch command.kind {
         case .fill:
-            path.fill(tint.opacity(opacity))
+            fillPath.addPath(command.path)
+        case .stroke:
+            strokePath.addPath(command.path)
         }
     }
 }
