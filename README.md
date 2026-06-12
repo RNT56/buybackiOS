@@ -9,6 +9,7 @@ Given:
 - An asset selected by name, ticker, ISIN, or WKN
 - Current or fallback sell price per share
 - Current gain percentage at that price
+- Optional sell fees, buy fees, and slippage buffer
 
 It assumes:
 
@@ -19,13 +20,17 @@ Formula:
 
 ```text
 costBasis = sellPrice / (1 + gainPercent / 100)
-taxableGain = max(0, sellPrice - costBasis)
+grossProceeds = sellPrice * sharesToSell
+netSaleProceeds = grossProceeds - sellFeeTotal
+taxableGain = max(0, netSaleProceeds - costBasis * sharesToSell)
 tax = taxableGain * taxRate
-afterTaxCash = sellPrice - tax
-maximumBuybackPrice = afterTaxCash / (1 + targetExtraSharesPercent / 100)
+afterTaxCash = netSaleProceeds - tax
+cashAvailableForBuyback = max(0, afterTaxCash - buyFeeTotal)
+targetShareCount = sharesToSell * (1 + targetExtraSharesPercent / 100)
+maximumBuybackPrice = cashAvailableForBuyback / targetShareCount / (1 + slippagePercent / 100)
 ```
 
-The app has a simple flow for asset lookup, auto-filled price, and gain input. The advanced section can override the price and adjust shares, tax rate, and target extra shares.
+The app has a simple flow for asset lookup, auto-filled price, and gain input. The advanced section can override the price and adjust shares, tax rate, target extra shares, sell fees, buy fees, and slippage. Saved scenarios let you store and reload calculator setups.
 
 ## Market Data
 
@@ -34,7 +39,7 @@ The app uses:
 - Finnhub for autocomplete and current quotes
 - OpenFIGI as a best-effort fallback for ISIN and WKN mapping
 
-You can add keys directly in the app under `API Keys`. App-entered keys are stored in the iOS Keychain and are preferred over bundled build settings.
+You can add keys directly in the app under `Settings`. App-entered keys are stored in a shared iOS Keychain access group so the app and widget can use the same runtime keys. Runtime keys are preferred over bundled build settings.
 
 For build-time bundled keys, create a local config file:
 
@@ -52,7 +57,7 @@ FINNHUB_API_KEY = your_finnhub_key
 
 Runtime key priority:
 
-1. In-app Keychain key
+1. Shared Keychain key saved in the app
 2. Bundled `Config/Secrets.xcconfig` key
 3. Manual/fallback pricing
 
@@ -65,6 +70,7 @@ The Xcode project is generated from `project.yml`:
 - Unit test target: `BuybackCalculatorTests`
 - Minimum deployment target: iOS 26.0
 - Shared calculation and market data sources: `Shared/`
+- Shared runtime API keys use `keychain-access-groups` entitlements generated from `project.yml`
 
 Regenerate the project after changing target membership, build settings, or Info.plist properties:
 
@@ -100,5 +106,6 @@ xcodebuild -project BuybackCalculator.xcodeproj \
    - Stock Symbol
    - Gain %
    - Fallback Price
+   - Optional tax rate, extra-share target, sell fees, buy fees, and slippage
 
-The widget tries to fetch a live quote on its timeline refresh and falls back to the configured price when the API key, network, rate limit, or quote is unavailable.
+The widget tries to fetch a live quote on its timeline refresh and falls back to the configured price when the API key, network, rate limit, or quote is unavailable. Tapping the widget opens the app for the configured symbol.
