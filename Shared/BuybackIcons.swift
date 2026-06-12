@@ -59,8 +59,13 @@ struct BuybackIcon: View {
     }
 
     var body: some View {
-        Canvas { context, size in
-            BuybackIconDrawing.draw(kind, in: &context, size: size, tint: tint, lineScale: lineScale)
+        GeometryReader { proxy in
+            ZStack {
+                ForEach(Array(BuybackIconDrawing.commands(for: kind, size: proxy.size, lineScale: lineScale).enumerated()), id: \.offset) { _, command in
+                    command.view(tint: tint)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .aspectRatio(1, contentMode: .fit)
         .accessibilityHidden(true)
@@ -95,12 +100,23 @@ struct IconLabel: View {
 }
 
 private enum BuybackIconDrawing {
-    static func draw(
-        _ kind: BuybackIconKind,
-        in context: inout GraphicsContext,
+    static func commands(
+        for kind: BuybackIconKind,
         size: CGSize,
-        tint: Color,
         lineScale: CGFloat
+    ) -> [IconDrawCommand] {
+        var commands: [IconDrawCommand] = []
+        draw(kind, size: size, lineScale: lineScale) { command in
+            commands.append(command)
+        }
+        return commands
+    }
+
+    private static func draw(
+        _ kind: BuybackIconKind,
+        size: CGSize,
+        lineScale: CGFloat,
+        emit: (IconDrawCommand) -> Void
     ) {
         let box = IconBox(size: size)
         let baseLine = max(box.side * 0.075 * lineScale, 1.35)
@@ -108,15 +124,11 @@ private enum BuybackIconDrawing {
         let heavyLine = max(box.side * 0.095 * lineScale, 1.7)
 
         func stroke(_ path: Path, opacity: Double = 1, width: CGFloat? = nil) {
-            context.stroke(
-                path,
-                with: .color(tint.opacity(opacity)),
-                style: StrokeStyle(lineWidth: width ?? baseLine, lineCap: .round, lineJoin: .round)
-            )
+            emit(.stroke(path, opacity: opacity, width: width ?? baseLine))
         }
 
         func fill(_ path: Path, opacity: Double = 0.18) {
-            context.fill(path, with: .color(tint.opacity(opacity)))
+            emit(.fill(path, opacity: opacity))
         }
 
         func line(_ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat) -> Path {
@@ -428,5 +440,37 @@ private struct IconBox {
             width: side * width,
             height: side * height
         )
+    }
+}
+
+private struct IconDrawCommand {
+    enum Kind {
+        case stroke(width: CGFloat)
+        case fill
+    }
+
+    let kind: Kind
+    let path: Path
+    let opacity: Double
+
+    static func stroke(_ path: Path, opacity: Double, width: CGFloat) -> IconDrawCommand {
+        IconDrawCommand(kind: .stroke(width: width), path: path, opacity: opacity)
+    }
+
+    static func fill(_ path: Path, opacity: Double) -> IconDrawCommand {
+        IconDrawCommand(kind: .fill, path: path, opacity: opacity)
+    }
+
+    @ViewBuilder
+    func view(tint: Color) -> some View {
+        switch kind {
+        case .stroke(let width):
+            path.stroke(
+                tint.opacity(opacity),
+                style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
+            )
+        case .fill:
+            path.fill(tint.opacity(opacity))
+        }
     }
 }

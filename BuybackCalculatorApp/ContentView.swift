@@ -185,7 +185,6 @@ struct ContentView: View {
             .background {
                 LiquidGlassBackground()
                 .ignoresSafeArea()
-                .backgroundExtensionEffect()
             }
             .navigationTitle("Buy-Back")
             .navigationBarTitleDisplayMode(.inline)
@@ -197,7 +196,7 @@ struct ContentView: View {
                     } label: {
                         IconLabel("Settings", icon: .settings)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.liquidGlass)
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -206,7 +205,7 @@ struct ContentView: View {
                     } label: {
                         IconLabel("Refresh Price", icon: .refresh)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.liquidGlass)
                     .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
                 }
 
@@ -247,6 +246,7 @@ struct ContentView: View {
             .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
         }
         .task {
+            apiKeys.load()
             configureLookupClient()
             apiKeysExpanded = !apiKeys.hasUsableFinnhubAPIKey
             restoreSelectionIfNeeded()
@@ -450,7 +450,7 @@ struct ContentView: View {
                 BuybackIcon(.settings)
                     .frame(width: 18, height: 18)
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.liquidGlass)
             .accessibilityLabel("Open API key settings")
         }
         .liquidSurface()
@@ -498,7 +498,7 @@ struct ContentView: View {
                         IconLabel("Save", icon: .save)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.liquidGlass)
 
                     Button(role: .destructive) {
                         apiKeys.clear()
@@ -508,7 +508,7 @@ struct ContentView: View {
                         IconLabel("Clear", icon: .clear)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.liquidGlass)
                 }
 
                 StatusRow(message: apiKeyStatusMessage)
@@ -707,7 +707,7 @@ struct ContentView: View {
                         IconLabel("Refresh selected price", icon: .refresh)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.liquidGlass)
                     .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
                 }
                 .padding(.top, 12)
@@ -1056,7 +1056,7 @@ struct ContentView: View {
                     BuybackIcon(.save)
                         .frame(width: 18, height: 18)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.liquidGlass)
                 .accessibilityLabel("Save current scenario")
             }
 
@@ -1106,7 +1106,7 @@ struct ContentView: View {
                     BuybackIcon(.alertArmed)
                         .frame(width: 18, height: 18)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.liquidGlass)
                 .accessibilityLabel("Arm alert at buy-back limit")
             }
 
@@ -1138,7 +1138,7 @@ struct ContentView: View {
                     IconLabel("Arm", icon: .selected)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.liquidGlass)
                 .frame(height: 52)
             }
 
@@ -1155,7 +1155,7 @@ struct ContentView: View {
                     IconLabel("Disable alert", icon: .alertOff)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.liquidGlass)
             }
         }
         .liquidSurface()
@@ -1199,7 +1199,7 @@ struct ContentView: View {
                 BuybackIcon(.refresh)
                     .frame(width: 18, height: 18)
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.liquidGlass)
             .accessibilityLabel("Reload widgets")
         }
         .liquidSurface()
@@ -1600,7 +1600,7 @@ private struct SavedScenarioRow: View {
                 BuybackIcon(.clear)
                     .frame(width: 18, height: 18)
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.liquidGlass)
             .accessibilityLabel("Delete saved scenario")
         }
         .padding(.horizontal, 11)

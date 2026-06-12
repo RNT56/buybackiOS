@@ -27,10 +27,6 @@ final class APIKeySettingsViewModel: ObservableObject {
         hasRuntimeFinnhubAPIKey || hasBundledFinnhubAPIKey
     }
 
-    init() {
-        load()
-    }
-
     func load() {
         do {
             finnhubAPIKey = try APIKeyStore.string(for: .finnhub) ?? ""

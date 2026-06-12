@@ -62,36 +62,48 @@ struct LiquidGlassBackground: View {
 
 private struct MarketGridOverlay: View {
     var body: some View {
-        Canvas { context, size in
-            var grid = Path()
-            let rowHeight = max(size.height / 18, 28)
-            var y: CGFloat = 0
-            while y <= size.height {
-                grid.move(to: CGPoint(x: 0, y: y))
-                grid.addLine(to: CGPoint(x: size.width, y: y))
-                y += rowHeight
+        GeometryReader { proxy in
+            ZStack {
+                gridPath(size: proxy.size)
+                    .stroke(.white.opacity(0.16), lineWidth: 0.6)
+
+                trendPath(size: proxy.size)
+                    .stroke(LiquidPalette.accent.opacity(0.18), lineWidth: 2)
             }
-
-            let columnWidth = max(size.width / 9, 42)
-            var x: CGFloat = 0
-            while x <= size.width {
-                grid.move(to: CGPoint(x: x, y: 0))
-                grid.addLine(to: CGPoint(x: x, y: size.height))
-                x += columnWidth
-            }
-
-            context.stroke(grid, with: .color(.white.opacity(0.16)), lineWidth: 0.6)
-
-            var trend = Path()
-            trend.move(to: CGPoint(x: 0, y: size.height * 0.58))
-            trend.addCurve(
-                to: CGPoint(x: size.width, y: size.height * 0.34),
-                control1: CGPoint(x: size.width * 0.25, y: size.height * 0.47),
-                control2: CGPoint(x: size.width * 0.62, y: size.height * 0.68)
-            )
-            context.stroke(trend, with: .color(LiquidPalette.accent.opacity(0.18)), lineWidth: 2)
         }
         .allowsHitTesting(false)
+    }
+
+    private func gridPath(size: CGSize) -> Path {
+        var grid = Path()
+        let rowHeight = max(size.height / 18, 28)
+        var y: CGFloat = 0
+        while y <= size.height {
+            grid.move(to: CGPoint(x: 0, y: y))
+            grid.addLine(to: CGPoint(x: size.width, y: y))
+            y += rowHeight
+        }
+
+        let columnWidth = max(size.width / 9, 42)
+        var x: CGFloat = 0
+        while x <= size.width {
+            grid.move(to: CGPoint(x: x, y: 0))
+            grid.addLine(to: CGPoint(x: x, y: size.height))
+            x += columnWidth
+        }
+
+        return grid
+    }
+
+    private func trendPath(size: CGSize) -> Path {
+        var trend = Path()
+        trend.move(to: CGPoint(x: 0, y: size.height * 0.58))
+        trend.addCurve(
+            to: CGPoint(x: size.width, y: size.height * 0.34),
+            control1: CGPoint(x: size.width * 0.25, y: size.height * 0.47),
+            control2: CGPoint(x: size.width * 0.62, y: size.height * 0.68)
+        )
+        return trend
     }
 }
 
@@ -137,8 +149,7 @@ struct LiquidGlassIcon: View {
                         }
                 } else {
                     shape
-                        .fill(tint.opacity(0.12))
-                        .glassEffect(.regular.tint(tint.opacity(0.18)).interactive(), in: shape)
+                        .fill(tint.opacity(0.13))
                         .overlay {
                             shape.stroke(.white.opacity(0.26), lineWidth: 0.8)
                         }
@@ -225,7 +236,6 @@ struct DropGauge: View {
                 ZStack(alignment: .leading) {
                     Capsule()
                         .fill(.primary.opacity(0.08))
-                        .glassEffect(.regular, in: Capsule())
 
                     Capsule()
                         .fill(
@@ -241,6 +251,36 @@ struct DropGauge: View {
             }
             .frame(height: 10)
         }
+    }
+}
+
+struct LiquidGlassButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.tint)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(minHeight: 42)
+            .background {
+                let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+                shape
+                    .fill(Color(uiColor: .secondarySystemGroupedBackground).opacity(configuration.isPressed ? 0.78 : 0.58))
+                    .overlay {
+                        shape.stroke(.white.opacity(configuration.isPressed ? 0.30 : 0.20), lineWidth: 0.8)
+                    }
+                    .shadow(color: .black.opacity(configuration.isPressed ? 0.03 : 0.07), radius: configuration.isPressed ? 4 : 10, y: configuration.isPressed ? 1 : 4)
+            }
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .opacity(isEnabled ? 1 : 0.42)
+    }
+}
+
+extension ButtonStyle where Self == LiquidGlassButtonStyle {
+    static var liquidGlass: LiquidGlassButtonStyle {
+        LiquidGlassButtonStyle()
     }
 }
 
@@ -279,10 +319,6 @@ private struct LiquidCardBackground: ViewModifier {
                                 ? LiquidPalette.accent.opacity(0.13)
                                 : Color(uiColor: .secondarySystemGroupedBackground).opacity(0.58)
                         )
-                        .glassEffect(
-                            prominent ? .regular.tint(tint).interactive() : .regular.tint(tint.opacity(0.45)).interactive(),
-                            in: shape
-                        )
                         .overlay {
                             shape.stroke(
                                 LinearGradient(
@@ -319,7 +355,6 @@ private struct LiquidFieldSurface: ViewModifier {
                 } else {
                     shape
                         .fill(.primary.opacity(isDisabled ? 0.026 : 0.048))
-                        .glassEffect(.regular.tint(LiquidPalette.accent.opacity(isFocused ? 0.16 : 0.06)).interactive(), in: shape)
                         .overlay {
                             shape.stroke(
                                 isFocused ? LiquidPalette.accent.opacity(0.62) : .white.opacity(0.16),
@@ -350,7 +385,6 @@ private struct LiquidCapsuleSurface: ViewModifier {
                 } else {
                     shape
                         .fill(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.48))
-                        .glassEffect(.regular.tint(tint.opacity(0.30)), in: shape)
                         .overlay {
                             shape.stroke(.white.opacity(0.18), lineWidth: 0.7)
                         }
