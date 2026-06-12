@@ -367,10 +367,11 @@ struct OpenFIGIIdentifierResolver: Sendable {
 }
 
 enum MarketDataClientFactory {
-    static func make(bundle: Bundle = .main) -> CompositeMarketDataClient? {
+    static func make(bundle: Bundle = .main, includeSavedKeys: Bool = true) -> CompositeMarketDataClient? {
         make(
             finnhubAPIKey: nil,
             openFIGIAPIKey: nil,
+            includeSavedKeys: includeSavedKeys,
             bundle: bundle
         )
     }
@@ -378,10 +379,11 @@ enum MarketDataClientFactory {
     static func make(
         finnhubAPIKey: String?,
         openFIGIAPIKey: String?,
+        includeSavedKeys: Bool = true,
         bundle: Bundle = .main
     ) -> CompositeMarketDataClient? {
-        let savedFinnhubAPIKey = try? APIKeyStore.string(for: .finnhub)
-        let savedOpenFIGIAPIKey = try? APIKeyStore.string(for: .openFIGI)
+        let savedFinnhubAPIKey = includeSavedKeys ? try? APIKeyStore.string(for: .finnhub) : nil
+        let savedOpenFIGIAPIKey = includeSavedKeys ? try? APIKeyStore.string(for: .openFIGI) : nil
 
         guard let resolvedFinnhubAPIKey = sanitizedAPIKey(finnhubAPIKey)
             ?? sanitizedAPIKey(savedFinnhubAPIKey)

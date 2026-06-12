@@ -37,6 +37,28 @@ final class APIKeySettingsViewModel: ObservableObject {
         }
     }
 
+    func loadAsync() async {
+        let loadedKeys = await Task.detached(priority: .utility) {
+            do {
+                return (
+                    finnhubAPIKey: try APIKeyStore.string(for: .finnhub) ?? "",
+                    openFIGIAPIKey: try APIKeyStore.string(for: .openFIGI) ?? "",
+                    errorMessage: nil as String?
+                )
+            } catch {
+                return (
+                    finnhubAPIKey: "",
+                    openFIGIAPIKey: "",
+                    errorMessage: error.localizedDescription
+                )
+            }
+        }.value
+
+        finnhubAPIKey = loadedKeys.finnhubAPIKey
+        openFIGIAPIKey = loadedKeys.openFIGIAPIKey
+        statusMessage = loadedKeys.errorMessage
+    }
+
     func save() {
         do {
             try APIKeyStore.set(finnhubAPIKey, for: .finnhub)

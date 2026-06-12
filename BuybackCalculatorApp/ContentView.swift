@@ -36,6 +36,7 @@ struct ContentView: View {
     @State private var apiKeysExpanded = false
     @State private var settingsPresented = false
     @State private var scenarioMessage: LookupMessage?
+    @State private var startupScheduled = false
     @FocusState private var focusedField: CalculatorField?
 
     private var activeSymbol: String {
@@ -177,17 +178,87 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                stableCalculatorContent
-                    .frame(maxWidth: 720, alignment: .leading)
+                contentLayout
+                    .frame(maxWidth: usesSplitLayout ? 1180 : 760, alignment: .leading)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 16)
             }
-            .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+            .background {
+                LiquidGlassBackground()
+                    .ignoresSafeArea()
+            }
             .navigationTitle("Buy-Back")
             .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        settingsPresented = true
+                    } label: {
+                        LiquidGlassActionIcon(icon: .settings, tint: LiquidPalette.blue)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Settings")
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        refreshSelectedQuote()
+                    } label: {
+                        LiquidGlassActionIcon(icon: .refresh)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
+                    .accessibilityLabel("Refresh price")
+                }
+
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        focusedField = nil
+                    }
+                }
+            }
         }
         .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+        .sheet(isPresented: $settingsPresented) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        apiKeyPanel
+                        widgetStatus
+                    }
+                    .frame(maxWidth: 760, alignment: .leading)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                }
+                .background {
+                    LiquidGlassBackground()
+                        .ignoresSafeArea()
+                }
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") {
+                            settingsPresented = false
+                        }
+                    }
+                }
+            }
+            .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+        }
+        .onAppear {
+            scheduleStartupIfNeeded()
+        }
+        .onChange(of: assetQuery) { _, newValue in
+            if newValue.normalizedStockSymbol != lookup.selectedAsset?.symbol {
+                lookup.clearSelection()
+                selectedAssetData = ""
+                symbolText = newValue.normalizedStockSymbol
+            }
+            lookup.scheduleSearch(query: newValue)
+        }
         .onChange(of: taxProfileRaw) { _, newValue in
             guard let profile = TaxProfile(rawValue: newValue), profile != .custom else {
                 return
@@ -196,176 +267,6 @@ struct ContentView: View {
         }
         .onOpenURL { url in
             handleDeepLink(url)
-        }
-    }
-
-    private var stableCalculatorContent: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(activeSymbol.isEmpty ? "Buy-back calculator" : activeSymbol)
-                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.6)
-
-                Text("Sell, account for tax, then calculate the buy-back limit.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let calculation {
-                stableResultCard(calculation)
-            } else {
-                stableInvalidCard
-            }
-
-            stableInputsCard
-            stableAdvancedCard
-        }
-    }
-
-    private func stableResultCard(_ calculation: BuybackCalculation) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Buy-back limit")
-                .font(.headline)
-
-            Text(calculation.maximumBuybackPrice.moneyString(currencyCode: calculation.currencyCode))
-                .font(.system(size: 52, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-
-            Text(calculation.summary)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack {
-                Text("Required pullback")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Text(calculation.requiredDropPercent.percentString)
-                    .font(.subheadline.monospacedDigit().weight(.bold))
-            }
-            ProgressView(value: min(max(calculation.requiredDropPercent / 40, 0), 1))
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    private var stableInvalidCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Check inputs")
-                .font(.headline)
-            Text(validationMessage)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    private var stableInputsCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Inputs")
-                .font(.headline)
-
-            stableTextInput("Symbol", text: $symbolText, suffix: "ticker", autocapitalization: .characters)
-            stableDecimalInput("Current price", text: $sellPriceText, suffix: activeCurrencyCode)
-            stableDecimalInput("Current gain", text: $gainPercentText, suffix: "%", keyboardType: .numbersAndPunctuation)
-            stableDecimalInput("Shares", text: $sharesText, suffix: "sh")
-            stableDecimalInput("Extra shares target", text: $targetExtraText, suffix: "%")
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .onChange(of: symbolText) { _, newValue in
-            assetQuery = newValue.normalizedStockSymbol
-        }
-    }
-
-    private var stableAdvancedCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Tax and costs")
-                .font(.headline)
-
-            Picker("Tax profile", selection: $taxProfileRaw) {
-                ForEach(TaxProfile.allCases) { profile in
-                    Text(profile.label).tag(profile.rawValue)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            stableDecimalInput("Tax rate", text: $taxRateText, suffix: "%", isDisabled: taxProfile != .custom)
-            stableTextInput("Tax currency", text: $taxCurrencyText, suffix: "ccy", autocapitalization: .characters)
-            stableDecimalInput("FX to tax currency", text: $fxRateText, suffix: "x")
-            stableDecimalInput("Slippage buffer", text: $slippageText, suffix: "%")
-            stableDecimalInput("Sell fees", text: $sellFeeText, suffix: activeCurrencyCode)
-            stableDecimalInput("Buy fees", text: $buyFeeText, suffix: activeCurrencyCode)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    private func stableDecimalInput(
-        _ title: String,
-        text: Binding<String>,
-        suffix: String,
-        keyboardType: UIKeyboardType = .decimalPad,
-        isDisabled: Bool = false
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 10) {
-                TextField(title, text: text)
-                    .keyboardType(keyboardType)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .font(.title3.monospacedDigit().weight(.semibold))
-                    .disabled(isDisabled)
-
-                Text(suffix)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 50)
-            .background(Color(uiColor: isDisabled ? .tertiarySystemGroupedBackground : .systemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-    }
-
-    private func stableTextInput(
-        _ title: String,
-        text: Binding<String>,
-        suffix: String,
-        autocapitalization: TextInputAutocapitalization = .never
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 10) {
-                TextField(title, text: text)
-                    .textInputAutocapitalization(autocapitalization)
-                    .autocorrectionDisabled()
-                    .font(.title3.monospaced().weight(.semibold))
-
-                Text(suffix)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 50)
-            .background(Color(uiColor: .systemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
     }
 
@@ -1470,6 +1371,20 @@ struct ContentView: View {
             finnhubAPIKey: apiKeys.effectiveFinnhubAPIKey,
             openFIGIAPIKey: apiKeys.effectiveOpenFIGIAPIKey
         )
+    }
+
+    private func scheduleStartupIfNeeded() {
+        guard !startupScheduled else { return }
+        startupScheduled = true
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            await apiKeys.loadAsync()
+            configureLookupClient()
+            apiKeysExpanded = !apiKeys.hasUsableFinnhubAPIKey
+            restoreSelectionIfNeeded()
+            lookup.scheduleSearch(query: assetQuery)
+        }
     }
 
     private func saveScenario(_ calculation: BuybackCalculation) {
