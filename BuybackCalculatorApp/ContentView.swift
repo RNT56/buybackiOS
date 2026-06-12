@@ -461,67 +461,75 @@ struct ContentView: View {
     }
 
     private var apiKeyPanel: some View {
-        DisclosureGroup(isExpanded: $apiKeysExpanded) {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 8) {
-                    IconLabel("Finnhub", icon: .live, tint: .secondary, iconSize: 14)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    SecureField("Required for live search and quotes", text: $apiKeys.finnhubAPIKey)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($focusedField, equals: .finnhubKey)
-                        .font(.body.monospaced())
-                        .padding(.horizontal, 13)
-                        .frame(height: 50)
-                        .liquidFieldSurface(isFocused: focusedField == .finnhubKey)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    IconLabel("OpenFIGI", icon: .apiKey, tint: .secondary, iconSize: 14)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    SecureField("Optional for higher identifier-map limits", text: $apiKeys.openFIGIAPIKey)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($focusedField, equals: .openFIGIKey)
-                        .font(.body.monospaced())
-                        .padding(.horizontal, 13)
-                        .frame(height: 50)
-                        .liquidFieldSurface(isFocused: focusedField == .openFIGIKey)
-                }
-
-                HStack(spacing: 10) {
-                    Button {
-                        apiKeys.save()
-                        configureLookupClient()
-                        lookup.scheduleSearch(query: assetQuery)
-                    } label: {
-                        LiquidGlassActionIcon(icon: .save, size: 44)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Save API keys")
-
-                    Button(role: .destructive) {
-                        apiKeys.clear()
-                        configureLookupClient()
-                        lookup.scheduleSearch(query: assetQuery)
-                    } label: {
-                        LiquidGlassActionIcon(icon: .clear, tint: .red, size: 44)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Clear API keys")
-                }
-
-                StatusRow(message: apiKeyStatusMessage)
+        VStack(alignment: .leading, spacing: 14) {
+            Button {
+                apiKeysExpanded.toggle()
+            } label: {
+                expansionHeader("API Keys", icon: apiKeys.hasUsableFinnhubAPIKey ? .apiKey : .key, isExpanded: apiKeysExpanded)
             }
-            .padding(.top, 12)
-        } label: {
-            SectionTitle("API Keys", icon: apiKeys.hasUsableFinnhubAPIKey ? .apiKey : .key)
+            .buttonStyle(.plain)
+            .accessibilityLabel("API Keys")
+            .accessibilityValue(apiKeysExpanded ? "Expanded" : "Collapsed")
+
+            if apiKeysExpanded {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        IconLabel("Finnhub", icon: .live, tint: .secondary, iconSize: 14)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        SecureField("Required for live search and quotes", text: $apiKeys.finnhubAPIKey)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focusedField, equals: .finnhubKey)
+                            .font(.body.monospaced())
+                            .padding(.horizontal, 13)
+                            .frame(height: 50)
+                            .liquidFieldSurface(isFocused: focusedField == .finnhubKey)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        IconLabel("OpenFIGI", icon: .apiKey, tint: .secondary, iconSize: 14)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        SecureField("Optional for higher identifier-map limits", text: $apiKeys.openFIGIAPIKey)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focusedField, equals: .openFIGIKey)
+                            .font(.body.monospaced())
+                            .padding(.horizontal, 13)
+                            .frame(height: 50)
+                            .liquidFieldSurface(isFocused: focusedField == .openFIGIKey)
+                    }
+
+                    HStack(spacing: 10) {
+                        Button {
+                            apiKeys.save()
+                            configureLookupClient()
+                            lookup.scheduleSearch(query: assetQuery)
+                        } label: {
+                            LiquidGlassActionIcon(icon: .save, size: 44)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Save API keys")
+
+                        Button(role: .destructive) {
+                            apiKeys.clear()
+                            configureLookupClient()
+                            lookup.scheduleSearch(query: assetQuery)
+                        } label: {
+                            LiquidGlassActionIcon(icon: .clear, tint: .red, size: 44)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Clear API keys")
+                    }
+
+                    StatusRow(message: apiKeyStatusMessage)
+                }
+            }
         }
         .liquidSurface()
     }
@@ -570,7 +578,16 @@ struct ContentView: View {
                 QuoteStatusRow(quote: quote, manualPriceEnabled: manualPriceEnabled)
             }
 
-            DisclosureGroup(isExpanded: $advancedExpanded) {
+            Button {
+                advancedExpanded.toggle()
+            } label: {
+                expansionHeader("Advanced", icon: .sliders, isExpanded: advancedExpanded)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Advanced")
+            .accessibilityValue(advancedExpanded ? "Expanded" : "Collapsed")
+
+            if advancedExpanded {
                 VStack(alignment: .leading, spacing: 18) {
                     advancedGroup("Position", icon: .shares) {
                         VStack(alignment: .leading, spacing: 12) {
@@ -694,12 +711,23 @@ struct ContentView: View {
                     .accessibilityLabel("Refresh selected price")
                 }
                 .padding(.top, 12)
-            } label: {
-                IconLabel("Advanced", icon: .sliders, iconSize: 17)
-                    .font(.headline)
             }
         }
         .liquidSurface()
+    }
+
+    private func expansionHeader(_ title: String, icon: BuybackIconKind, isExpanded: Bool) -> some View {
+        HStack(spacing: 10) {
+            IconLabel(title, icon: icon, iconSize: 17)
+                .font(.headline)
+
+            Spacer(minLength: 8)
+
+            BuybackIcon(.chevron, tint: .secondary)
+                .frame(width: 14, height: 14)
+                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+        }
+        .contentShape(Rectangle())
     }
 
     private func advancedGroup<Content: View>(
