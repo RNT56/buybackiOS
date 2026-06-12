@@ -79,6 +79,7 @@ final class BuybackCalculationTests: XCTestCase {
                 sharesToSell: 10,
                 averageCostBasis: 100,
                 sellPrice: 200,
+                taxProfile: .custom,
                 taxRatePercent: 25,
                 targetExtraSharesPercent: 5,
                 sellFeeTotal: 10,
@@ -117,5 +118,63 @@ final class BuybackCalculationTests: XCTestCase {
                 slippagePercent: -0.1
             )
         )
+        XCTAssertNil(
+            BuybackCalculator.calculate(
+                sellPrice: 100,
+                gainAtSellPercent: 20,
+                taxProfile: .custom,
+                taxRatePercent: 101
+            )
+        )
+    }
+
+    func testTaxProfileOverridesCustomRateAndTracksTaxCurrency() throws {
+        let calculation = try XCTUnwrap(
+            BuybackCalculator.calculate(
+                symbol: "AAPL",
+                sharesToSell: 1,
+                averageCostBasis: 100,
+                sellPrice: 200,
+                taxProfile: .usLongTerm,
+                taxRatePercent: 999,
+                taxCurrencyCode: "EUR",
+                fxRateToTaxCurrency: 0.9,
+                targetExtraSharesPercent: 2.5,
+                currencyCode: "USD"
+            )
+        )
+
+        XCTAssertEqual(calculation.taxRatePercent, 15, accuracy: 0.0001)
+        XCTAssertEqual(calculation.taxableGainInTaxCurrency, 90, accuracy: 0.0001)
+        XCTAssertEqual(calculation.taxAmountInTaxCurrency, 13.5, accuracy: 0.0001)
+        XCTAssertEqual(calculation.taxAmount, 15, accuracy: 0.0001)
+        XCTAssertEqual(calculation.maximumBuybackPrice, 180.4878, accuracy: 0.0001)
+    }
+
+    func testWeightedTaxLotsProduceAverageCostBasis() throws {
+        let lots = [
+            TaxLot(shares: 2, averageCostBasis: 100),
+            TaxLot(shares: 3, averageCostBasis: 140)
+        ]
+
+        XCTAssertEqual(TaxLot.totalShares(lots), 5, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(TaxLot.weightedAverageCostBasis(lots)), 124, accuracy: 0.0001)
+
+        let calculation = try XCTUnwrap(
+            BuybackCalculator.calculate(
+                symbol: "MSFT",
+                sharesToSell: TaxLot.totalShares(lots),
+                averageCostBasis: try XCTUnwrap(TaxLot.weightedAverageCostBasis(lots)),
+                sellPrice: 200,
+                taxProfile: .custom,
+                taxRatePercent: 20,
+                targetExtraSharesPercent: 0
+            )
+        )
+
+        XCTAssertEqual(calculation.costBasisTotal, 620, accuracy: 0.0001)
+        XCTAssertEqual(calculation.taxableGainTotal, 380, accuracy: 0.0001)
+        XCTAssertEqual(calculation.taxAmount, 76, accuracy: 0.0001)
+        XCTAssertEqual(calculation.maximumBuybackPrice, 184.8, accuracy: 0.0001)
     }
 }

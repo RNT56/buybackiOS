@@ -2,21 +2,35 @@ import SwiftUI
 import WidgetKit
 
 struct ContentView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     @AppStorage("buybackCalculator.assetQuery") private var assetQuery = BuybackCalculator.defaultSymbol
     @AppStorage("buybackCalculator.selectedAsset") private var selectedAssetData = ""
     @AppStorage("buybackCalculator.symbol") private var symbolText = BuybackCalculator.defaultSymbol
     @AppStorage("buybackCalculator.sellPrice") private var sellPriceText = BuybackCalculator.defaultSellPrice.inputString
     @AppStorage("buybackCalculator.gainPercent") private var gainPercentText = "463.10"
     @AppStorage("buybackCalculator.shares") private var sharesText = "1"
+    @AppStorage("buybackCalculator.taxProfile") private var taxProfileRaw = BuybackCalculator.defaultTaxProfile.rawValue
     @AppStorage("buybackCalculator.taxRate") private var taxRateText = BuybackCalculator.fixedTaxRatePercent.inputString
+    @AppStorage("buybackCalculator.taxCurrency") private var taxCurrencyText = BuybackCalculator.defaultCurrencyCode
+    @AppStorage("buybackCalculator.fxRateToTaxCurrency") private var fxRateText = BuybackCalculator.defaultFXRateToTaxCurrency.inputString
     @AppStorage("buybackCalculator.targetExtra") private var targetExtraText = BuybackCalculator.fixedTargetExtraSharesPercent.inputString
     @AppStorage("buybackCalculator.sellFee") private var sellFeeText = BuybackCalculator.defaultSellFeeTotal.inputString
     @AppStorage("buybackCalculator.buyFee") private var buyFeeText = BuybackCalculator.defaultBuyFeeTotal.inputString
     @AppStorage("buybackCalculator.slippage") private var slippageText = BuybackCalculator.defaultSlippagePercent.inputString
+    @AppStorage("buybackCalculator.taxLotsEnabled") private var taxLotsEnabled = false
+    @AppStorage("buybackCalculator.lot1Shares") private var lot1SharesText = ""
+    @AppStorage("buybackCalculator.lot1Basis") private var lot1BasisText = ""
+    @AppStorage("buybackCalculator.lot2Shares") private var lot2SharesText = ""
+    @AppStorage("buybackCalculator.lot2Basis") private var lot2BasisText = ""
+    @AppStorage("buybackCalculator.lot3Shares") private var lot3SharesText = ""
+    @AppStorage("buybackCalculator.lot3Basis") private var lot3BasisText = ""
+    @AppStorage("buybackCalculator.alertPrice") private var alertPriceText = ""
 
     @StateObject private var lookup = MarketLookupViewModel()
     @StateObject private var apiKeys = APIKeySettingsViewModel()
     @StateObject private var scenarios = SavedScenarioStore()
+    @StateObject private var alerts = PriceAlertStore()
     @State private var manualPriceEnabled = false
     @State private var advancedExpanded = false
     @State private var apiKeysExpanded = false
@@ -45,7 +59,27 @@ struct ContentView: View {
     }
 
     private var taxRatePercent: Double? {
-        BuybackCalculator.parseDecimal(taxRateText)
+        if taxProfile == .custom {
+            return BuybackCalculator.parseDecimal(taxRateText)
+        }
+
+        return taxProfile.defaultTaxRatePercent
+    }
+
+    private var taxProfile: TaxProfile {
+        TaxProfile(rawValue: taxProfileRaw) ?? BuybackCalculator.defaultTaxProfile
+    }
+
+    private var effectiveTaxRatePercent: Double? {
+        taxRatePercent.map { taxProfile.resolvedTaxRatePercent(customRatePercent: $0) }
+    }
+
+    private var taxCurrencyCode: String {
+        taxCurrencyText.normalizedCurrencyCode
+    }
+
+    private var fxRateToTaxCurrency: Double? {
+        BuybackCalculator.parseDecimal(fxRateText)
     }
 
     private var targetExtraSharesPercent: Double? {
@@ -64,11 +98,31 @@ struct ContentView: View {
         BuybackCalculator.parseDecimal(slippageText)
     }
 
+    private var alertPrice: Double? {
+        BuybackCalculator.parseDecimal(alertPriceText)
+    }
+
+    private var taxLots: [TaxLot] {
+        [
+            taxLot(sharesText: lot1SharesText, basisText: lot1BasisText),
+            taxLot(sharesText: lot2SharesText, basisText: lot2BasisText),
+            taxLot(sharesText: lot3SharesText, basisText: lot3BasisText)
+        ].compactMap { $0 }
+    }
+
+    private var lotAverageCostBasis: Double? {
+        TaxLot.weightedAverageCostBasis(taxLots)
+    }
+
+    private var lotSharesToSell: Double? {
+        let shares = TaxLot.totalShares(taxLots)
+        return shares > 0 ? shares : nil
+    }
+
     private var calculation: BuybackCalculation? {
         guard let sellPrice,
-              let gainPercent,
-              let sharesToSell,
               let taxRatePercent,
+              let fxRateToTaxCurrency,
               let targetExtraSharesPercent,
               let sellFeeTotal,
               let buyFeeTotal,
@@ -77,43 +131,54 @@ struct ContentView: View {
             return nil
         }
 
-        return BuybackCalculator.calculate(
-            symbol: activeSymbol,
-            sellPrice: sellPrice,
-            gainAtSellPercent: gainPercent,
-            sharesToSell: sharesToSell,
-            taxRatePercent: taxRatePercent,
-            targetExtraSharesPercent: targetExtraSharesPercent,
-            sellFeeTotal: sellFeeTotal,
-            buyFeeTotal: buyFeeTotal,
-            slippagePercent: slippagePercent,
-            currencyCode: activeCurrencyCode
-        )
+        if taxLotsEnabled,
+           let lotSharesToSell,
+           let lotAverageCostBasis {
+            return BuybackCalculator.calculate(
+                symbol: activeSymbol,
+                sharesToSell: lotSharesToSell,
+                averageCostBasis: lotAverageCostBasis,
+                sellPrice: sellPrice,
+                taxProfile: taxProfile,
+                taxRatePercent: taxRatePercent,
+                taxCurrencyCode: taxCurrencyCode,
+                fxRateToTaxCurrency: fxRateToTaxCurrency,
+                targetExtraSharesPercent: targetExtraSharesPercent,
+                sellFeeTotal: sellFeeTotal,
+                buyFeeTotal: buyFeeTotal,
+                slippagePercent: slippagePercent,
+                currencyCode: activeCurrencyCode
+            )
+        } else {
+            guard let gainPercent,
+                  let sharesToSell
+            else {
+                return nil
+            }
+
+            return BuybackCalculator.calculate(
+                symbol: activeSymbol,
+                sellPrice: sellPrice,
+                gainAtSellPercent: gainPercent,
+                sharesToSell: sharesToSell,
+                taxProfile: taxProfile,
+                taxRatePercent: taxRatePercent,
+                taxCurrencyCode: taxCurrencyCode,
+                fxRateToTaxCurrency: fxRateToTaxCurrency,
+                targetExtraSharesPercent: targetExtraSharesPercent,
+                sellFeeTotal: sellFeeTotal,
+                buyFeeTotal: buyFeeTotal,
+                slippagePercent: slippagePercent,
+                currencyCode: activeCurrencyCode
+            )
+        }
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    header
-                    lookupPanel
-                    if !apiKeys.hasUsableFinnhubAPIKey {
-                        apiKeyPrompt
-                    }
-                    inputPanel
-
-                    if let calculation {
-                        resultSummary(calculation)
-                        positionBreakdown(calculation)
-                        sensitivitySection(calculation)
-                        scenarioSection(calculation)
-                    } else {
-                        invalidState
-                    }
-
-                    widgetStatus
-                }
-                .frame(maxWidth: 760, alignment: .leading)
+                contentLayout
+                .frame(maxWidth: usesSplitLayout ? 1180 : 760, alignment: .leading)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 16)
             }
@@ -195,8 +260,66 @@ struct ContentView: View {
             }
             lookup.scheduleSearch(query: newValue)
         }
+        .onChange(of: taxProfileRaw) { _, newValue in
+            guard let profile = TaxProfile(rawValue: newValue), profile != .custom else {
+                return
+            }
+            taxRateText = profile.defaultTaxRatePercent.inputString
+        }
         .onOpenURL { url in
             handleDeepLink(url)
+        }
+    }
+
+    private var usesSplitLayout: Bool {
+        horizontalSizeClass == .regular
+    }
+
+    @ViewBuilder
+    private var contentLayout: some View {
+        if usesSplitLayout {
+            HStack(alignment: .top, spacing: 18) {
+                VStack(alignment: .leading, spacing: 18) {
+                    primaryInputColumn
+                    widgetStatus
+                }
+                .frame(maxWidth: 500, alignment: .topLeading)
+
+                VStack(alignment: .leading, spacing: 18) {
+                    resultColumn
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 18) {
+                primaryInputColumn
+                resultColumn
+                widgetStatus
+            }
+        }
+    }
+
+    private var primaryInputColumn: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            header
+            lookupPanel
+            if !apiKeys.hasUsableFinnhubAPIKey {
+                apiKeyPrompt
+            }
+            inputPanel
+        }
+    }
+
+    @ViewBuilder
+    private var resultColumn: some View {
+        if let calculation {
+            resultSummary(calculation)
+            positionBreakdown(calculation)
+            alertSection(calculation)
+            sensitivitySection(calculation)
+            scenarioSection(calculation)
+        } else {
+            invalidState
         }
     }
 
@@ -222,7 +345,7 @@ struct ContentView: View {
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], alignment: .leading, spacing: 8) {
                 GlassBadge(title: "Price", value: sellPrice.map { $0.moneyString(currencyCode: activeCurrencyCode) } ?? "Missing")
-                GlassBadge(title: "Tax", value: parsedText(taxRateText) + "%")
+                GlassBadge(title: "Tax", value: (effectiveTaxRatePercent?.inputString ?? parsedText(taxRateText)) + "%")
                 GlassBadge(title: "Target", value: "+" + parsedText(targetExtraText) + "%")
                 if (sellFeeTotal ?? 0) + (buyFeeTotal ?? 0) > 0 || (slippagePercent ?? 0) > 0 {
                     GlassBadge(title: "Costs", value: ((sellFeeTotal ?? 0) + (buyFeeTotal ?? 0)).moneyString(currencyCode: activeCurrencyCode))
@@ -399,7 +522,8 @@ struct ContentView: View {
                     suffix: "%",
                     icon: "percent",
                     field: .gain,
-                    keyboardType: .numbersAndPunctuation
+                    keyboardType: .numbersAndPunctuation,
+                    isDisabled: taxLotsEnabled
                 )
             }
 
@@ -424,6 +548,19 @@ struct ContentView: View {
                             .font(.subheadline.weight(.semibold))
                     }
 
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Tax profile", systemImage: "person.text.rectangle")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        Picker("Tax profile", selection: $taxProfileRaw) {
+                            ForEach(TaxProfile.allCases) { profile in
+                                Text(profile.label).tag(profile.rawValue)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
                     LazyVGrid(
                         columns: [
                             GridItem(.flexible(), spacing: 12),
@@ -431,8 +568,24 @@ struct ContentView: View {
                         ],
                         spacing: 12
                     ) {
-                        decimalField("Shares", text: $sharesText, suffix: "sh", icon: "number", field: .shares)
-                        decimalField("Tax rate", text: $taxRateText, suffix: "%", icon: "building.columns", field: .taxRate)
+                        decimalField("Shares", text: $sharesText, suffix: "sh", icon: "number", field: .shares, isDisabled: taxLotsEnabled)
+                        decimalField("Tax rate", text: $taxRateText, suffix: "%", icon: "building.columns", field: .taxRate, isDisabled: taxProfile != .custom)
+
+                        textField(
+                            "Tax currency",
+                            text: $taxCurrencyText,
+                            suffix: "ccy",
+                            icon: "coloncurrencysign.circle",
+                            field: .taxCurrency
+                        )
+
+                        decimalField(
+                            "FX to tax currency",
+                            text: $fxRateText,
+                            suffix: "x",
+                            icon: "arrow.left.arrow.right",
+                            field: .fxRate
+                        )
 
                         decimalField(
                             "Extra shares target",
@@ -465,6 +618,41 @@ struct ContentView: View {
                             icon: "plus.circle",
                             field: .buyFee
                         )
+                    }
+
+                    Toggle(isOn: $taxLotsEnabled) {
+                        Label("Use tax lots", systemImage: "tablecells")
+                            .font(.subheadline.weight(.semibold))
+                    }
+
+                    if taxLotsEnabled {
+                        VStack(alignment: .leading, spacing: 10) {
+                            taxLotRow(
+                                title: "Lot 1",
+                                shares: $lot1SharesText,
+                                basis: $lot1BasisText,
+                                sharesField: .lot1Shares,
+                                basisField: .lot1Basis
+                            )
+                            taxLotRow(
+                                title: "Lot 2",
+                                shares: $lot2SharesText,
+                                basis: $lot2BasisText,
+                                sharesField: .lot2Shares,
+                                basisField: .lot2Basis
+                            )
+                            taxLotRow(
+                                title: "Lot 3",
+                                shares: $lot3SharesText,
+                                basis: $lot3BasisText,
+                                sharesField: .lot3Shares,
+                                basisField: .lot3Basis
+                            )
+
+                            if let lotSharesToSell, let lotAverageCostBasis {
+                                StatusRow(message: .info("Selling \(lotSharesToSell.shareString) shares at weighted basis \(lotAverageCostBasis.moneyString(currencyCode: activeCurrencyCode))."))
+                            }
+                        }
                     }
 
                     Button {
@@ -523,6 +711,71 @@ struct ContentView: View {
         }
     }
 
+    private func textField(
+        _ title: String,
+        text: Binding<String>,
+        suffix: String,
+        icon: String,
+        field: CalculatorField,
+        isDisabled: Bool = false
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.74)
+
+            HStack(spacing: 8) {
+                TextField(title, text: text)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: field)
+                    .font(.title3.weight(.semibold).monospaced())
+                    .lineLimit(1)
+                    .disabled(isDisabled)
+
+                Text(suffix)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .textCase(.uppercase)
+            }
+            .padding(.horizontal, 13)
+            .frame(height: 52)
+            .liquidFieldSurface(isFocused: focusedField == field, isDisabled: isDisabled)
+        }
+    }
+
+    private func taxLotRow(
+        title: String,
+        shares: Binding<String>,
+        basis: Binding<String>,
+        sharesField: CalculatorField,
+        basisField: CalculatorField
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12)
+                ],
+                spacing: 12
+            ) {
+                decimalField("Shares", text: shares, suffix: "sh", icon: "number", field: sharesField)
+                decimalField("Basis", text: basis, suffix: activeCurrencyCode, icon: "banknote", field: basisField)
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .liquidCardBackground(tint: LiquidPalette.blue.opacity(0.14))
+    }
+
     private func resultSummary(_ calculation: BuybackCalculation) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .center) {
@@ -568,9 +821,16 @@ struct ContentView: View {
             MetricTile(title: "After-tax cash", value: calculation.afterTaxCash.moneyString(currencyCode: calculation.currencyCode), systemImage: "creditcard")
             MetricTile(title: "Buyback cash", value: calculation.cashAvailableForBuyback.moneyString(currencyCode: calculation.currencyCode), systemImage: "cart")
             MetricTile(title: "Tax estimate", value: calculation.taxAmount.moneyString(currencyCode: calculation.currencyCode), systemImage: "building.columns")
+            MetricTile(title: "Tax currency", value: calculation.taxAmountInTaxCurrency.moneyString(currencyCode: calculation.taxCurrencyCode), systemImage: "coloncurrencysign.circle")
+            MetricTile(title: "Tax profile", value: calculation.taxProfile.label, systemImage: "person.text.rectangle")
             MetricTile(title: "Target shares", value: calculation.targetShareCount.shareString, systemImage: "plus.forwardslash.minus")
             MetricTile(title: "Trading costs", value: (calculation.sellFeeTotal + calculation.buyFeeTotal).moneyString(currencyCode: calculation.currencyCode), systemImage: "receipt")
             MetricTile(title: "Slippage", value: calculation.slippagePercent.compactPercentString, systemImage: "waveform.path.ecg")
+            if taxLotsEnabled {
+                MetricTile(title: "Basis source", value: "Tax lots", systemImage: "tablecells")
+            } else if calculation.fxRateToTaxCurrency != 1 || calculation.taxCurrencyCode != calculation.currencyCode {
+                MetricTile(title: "FX rate", value: calculation.fxRateToTaxCurrency.inputString, systemImage: "arrow.left.arrow.right")
+            }
         }
     }
 
@@ -650,6 +910,78 @@ struct ContentView: View {
         .liquidSurface()
     }
 
+    private func alertSection(_ calculation: BuybackCalculation) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                SectionTitle("Price alert", systemImage: "bell")
+                Spacer(minLength: 8)
+
+                Button {
+                    alertPriceText = calculation.maximumBuybackPrice.inputString
+                    alerts.save(
+                        symbol: calculation.symbol,
+                        targetPrice: calculation.maximumBuybackPrice,
+                        currencyCode: calculation.currencyCode
+                    )
+                    evaluateAlert(calculation)
+                } label: {
+                    Image(systemName: "bell.badge")
+                }
+                .buttonStyle(.glass)
+                .accessibilityLabel("Arm alert at buy-back limit")
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12)
+                ],
+                spacing: 12
+            ) {
+                decimalField(
+                    "Alert price",
+                    text: $alertPriceText,
+                    suffix: calculation.currencyCode,
+                    icon: "bell.and.waves.left.and.right",
+                    field: .alertPrice
+                )
+
+                Button {
+                    if let alertPrice {
+                        alerts.save(
+                            symbol: calculation.symbol,
+                            targetPrice: alertPrice,
+                            currencyCode: calculation.currencyCode
+                        )
+                        evaluateAlert(calculation)
+                    }
+                } label: {
+                    Label("Arm", systemImage: "checkmark.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+                .frame(height: 52)
+            }
+
+            if let alert = alerts.alert(for: calculation.symbol), alert.isEnabled {
+                StatusRow(message: .info("Armed for \(alert.targetPrice.moneyString(currencyCode: alert.currencyCode)). Alerts are checked on quote refresh."))
+            } else if let message = alerts.statusMessage {
+                StatusRow(message: message)
+            }
+
+            if alerts.alert(for: calculation.symbol)?.isEnabled == true {
+                Button(role: .destructive) {
+                    alerts.disable(symbol: calculation.symbol)
+                } label: {
+                    Label("Disable alert", systemImage: "bell.slash")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+            }
+        }
+        .liquidSurface()
+    }
+
     private var invalidState: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 9) {
@@ -722,20 +1054,33 @@ struct ContentView: View {
             return "Current price must be above 0."
         }
 
-        guard let gainPercent else {
-            return "Enter a numeric gain percentage."
+        if taxLotsEnabled {
+            guard lotSharesToSell != nil, lotAverageCostBasis != nil else {
+                return "Enter at least one valid tax lot."
+            }
+        } else {
+            guard let gainPercent else {
+                return "Enter a numeric gain percentage."
+            }
+
+            guard gainPercent > -100 else {
+                return "Gain must be greater than -100%."
+            }
+
+            guard let sharesToSell, sharesToSell > 0 else {
+                return "Shares must be greater than 0."
+            }
         }
 
-        guard gainPercent > -100 else {
-            return "Gain must be greater than -100%."
-        }
-
-        guard let sharesToSell, sharesToSell > 0 else {
-            return "Shares must be greater than 0."
-        }
-
-        guard let taxRatePercent, taxRatePercent >= 0, taxRatePercent <= 100 else {
+        guard let effectiveTaxRatePercent,
+              effectiveTaxRatePercent >= 0,
+              effectiveTaxRatePercent <= 100
+        else {
             return "Tax rate must be between 0% and 100%."
+        }
+
+        guard let fxRateToTaxCurrency, fxRateToTaxCurrency > 0 else {
+            return "FX rate must be greater than 0."
         }
 
         guard let targetExtraSharesPercent, targetExtraSharesPercent >= 0 else {
@@ -754,7 +1099,7 @@ struct ContentView: View {
             return "Slippage must be 0% or higher."
         }
 
-        return "Enter a selected asset, current price, and gain."
+        return "Enter valid calculator inputs."
     }
 
     private func sensitivityRows(for calculation: BuybackCalculation) -> [SensitivityRow] {
@@ -763,10 +1108,13 @@ struct ContentView: View {
 
             guard let variant = BuybackCalculator.calculate(
                 symbol: calculation.symbol,
-                sellPrice: sellPrice,
-                gainAtSellPercent: calculation.gainAtSellPercent,
                 sharesToSell: calculation.sharesToSell,
+                averageCostBasis: calculation.averageCostBasis,
+                sellPrice: sellPrice,
+                taxProfile: calculation.taxProfile,
                 taxRatePercent: calculation.taxRatePercent,
+                taxCurrencyCode: calculation.taxCurrencyCode,
+                fxRateToTaxCurrency: calculation.fxRateToTaxCurrency,
                 targetExtraSharesPercent: calculation.targetExtraSharesPercent,
                 sellFeeTotal: calculation.sellFeeTotal,
                 buyFeeTotal: calculation.buyFeeTotal,
@@ -798,6 +1146,9 @@ struct ContentView: View {
             if let quote = await lookup.fetchQuote(for: asset) {
                 sellPriceText = quote.price.inputString
                 manualPriceEnabled = false
+                if let calculation {
+                    evaluateAlert(calculation)
+                }
             } else {
                 manualPriceEnabled = true
             }
@@ -810,6 +1161,9 @@ struct ContentView: View {
             if let quote = await lookup.fetchQuote(for: selectedAsset) {
                 sellPriceText = quote.price.inputString
                 manualPriceEnabled = false
+                if let calculation {
+                    evaluateAlert(calculation)
+                }
             } else {
                 manualPriceEnabled = true
             }
@@ -857,11 +1211,16 @@ struct ContentView: View {
             sellPrice: calculation.sellPrice,
             gainPercent: calculation.gainAtSellPercent,
             sharesToSell: calculation.sharesToSell,
+            taxProfile: calculation.taxProfile,
             taxRatePercent: calculation.taxRatePercent,
+            taxCurrencyCode: calculation.taxCurrencyCode,
+            fxRateToTaxCurrency: calculation.fxRateToTaxCurrency,
             targetExtraSharesPercent: calculation.targetExtraSharesPercent,
             sellFeeTotal: calculation.sellFeeTotal,
             buyFeeTotal: calculation.buyFeeTotal,
-            slippagePercent: calculation.slippagePercent
+            slippagePercent: calculation.slippagePercent,
+            taxLotsEnabled: taxLotsEnabled,
+            taxLots: taxLots
         )
 
         scenarios.save(scenario)
@@ -872,11 +1231,16 @@ struct ContentView: View {
         sellPriceText = scenario.sellPrice.inputString
         gainPercentText = scenario.gainPercent.inputString
         sharesText = scenario.sharesToSell.inputString
+        taxProfileRaw = scenario.taxProfile.rawValue
         taxRateText = scenario.taxRatePercent.inputString
+        taxCurrencyText = scenario.taxCurrencyCode
+        fxRateText = scenario.fxRateToTaxCurrency.inputString
         targetExtraText = scenario.targetExtraSharesPercent.inputString
         sellFeeText = scenario.sellFeeTotal.inputString
         buyFeeText = scenario.buyFeeTotal.inputString
         slippageText = scenario.slippagePercent.inputString
+        taxLotsEnabled = scenario.taxLotsEnabled
+        applyTaxLots(scenario.taxLots)
         manualPriceEnabled = scenario.manualPriceEnabled
         focusedField = nil
 
@@ -936,8 +1300,55 @@ struct ContentView: View {
             sharesText = shares
         }
 
+        if let taxProfile = value("taxProfile"),
+           let profile = TaxProfile(rawValue: taxProfile) {
+            taxProfileRaw = profile.rawValue
+        }
+
+        if let taxRate = value("taxRate", "taxRatePercent") {
+            taxRateText = taxRate
+        }
+
+        if let taxCurrency = value("taxCurrency") {
+            taxCurrencyText = taxCurrency
+        }
+
+        if let fxRate = value("fxRate", "fxRateToTaxCurrency") {
+            fxRateText = fxRate
+        }
+
         scenarioMessage = .info("Loaded widget values.")
         focusedField = .gain
+    }
+
+    private func taxLot(sharesText: String, basisText: String) -> TaxLot? {
+        guard let shares = BuybackCalculator.parseDecimal(sharesText),
+              let basis = BuybackCalculator.parseDecimal(basisText)
+        else {
+            return nil
+        }
+
+        let lot = TaxLot(shares: shares, averageCostBasis: basis)
+        return lot.isValid ? lot : nil
+    }
+
+    private func applyTaxLots(_ lots: [TaxLot]) {
+        let lotValues = Array(lots.prefix(3))
+        lot1SharesText = lotValues.indices.contains(0) ? lotValues[0].shares.inputString : ""
+        lot1BasisText = lotValues.indices.contains(0) ? lotValues[0].averageCostBasis.inputString : ""
+        lot2SharesText = lotValues.indices.contains(1) ? lotValues[1].shares.inputString : ""
+        lot2BasisText = lotValues.indices.contains(1) ? lotValues[1].averageCostBasis.inputString : ""
+        lot3SharesText = lotValues.indices.contains(2) ? lotValues[2].shares.inputString : ""
+        lot3BasisText = lotValues.indices.contains(2) ? lotValues[2].averageCostBasis.inputString : ""
+    }
+
+    private func evaluateAlert(_ calculation: BuybackCalculation) {
+        guard let currentPrice = sellPrice else { return }
+        alerts.evaluate(
+            symbol: calculation.symbol,
+            price: currentPrice,
+            calculation: calculation
+        )
     }
 
     private func parsedText(_ text: String) -> String {
@@ -951,10 +1362,19 @@ private enum CalculatorField: Hashable {
     case gain
     case shares
     case taxRate
+    case taxCurrency
+    case fxRate
     case targetExtra
     case sellFee
     case buyFee
     case slippage
+    case lot1Shares
+    case lot1Basis
+    case lot2Shares
+    case lot2Basis
+    case lot3Shares
+    case lot3Basis
+    case alertPrice
     case finnhubKey
     case openFIGIKey
 }

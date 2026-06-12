@@ -29,6 +29,7 @@ targets:
       - target: BuybackWidgetExtension
         embed: true
       - sdk: Security.framework
+      - sdk: UserNotifications.framework
     entitlements:
       path: BuybackCalculatorApp/BuybackCalculator.entitlements
       properties:

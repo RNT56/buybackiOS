@@ -2,6 +2,26 @@ import WidgetKit
 import SwiftUI
 import AppIntents
 
+enum WidgetTaxProfile: String, AppEnum {
+    case germany
+    case usLongTerm
+    case usShortTerm
+    case custom
+
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Tax Profile")
+
+    static let caseDisplayRepresentations: [WidgetTaxProfile: DisplayRepresentation] = [
+        .germany: "Germany",
+        .usLongTerm: "US long",
+        .usShortTerm: "US short",
+        .custom: "Custom"
+    ]
+
+    var taxProfile: TaxProfile {
+        TaxProfile(rawValue: rawValue) ?? BuybackCalculator.defaultTaxProfile
+    }
+}
+
 struct BuybackWidgetConfiguration: WidgetConfigurationIntent {
     static let title: LocalizedStringResource = "Buy-Back Calculator"
     static let description = IntentDescription("Calculate the buy-back price from a symbol, current gain, and live or fallback price.")
@@ -15,8 +35,17 @@ struct BuybackWidgetConfiguration: WidgetConfigurationIntent {
     @Parameter(title: "Fallback Price", default: 185.0)
     var fallbackSellPrice: Double
 
+    @Parameter(title: "Tax Profile", default: .germany)
+    var taxProfile: WidgetTaxProfile
+
     @Parameter(title: "Tax Rate %", default: 27.0)
     var taxRatePercent: Double
+
+    @Parameter(title: "Tax Currency", default: "USD")
+    var taxCurrency: String
+
+    @Parameter(title: "FX to Tax Currency", default: 1.0)
+    var fxRateToTaxCurrency: Double
 
     @Parameter(title: "Extra Shares Target %", default: 2.5)
     var targetExtraSharesPercent: Double
@@ -118,7 +147,10 @@ struct BuybackProvider: AppIntentTimelineProvider {
                 sellPrice: quote.price,
                 gainAtSellPercent: configuration.gainAtSellPercent,
                 sharesToSell: 1,
+                taxProfile: configuration.taxProfile.taxProfile,
                 taxRatePercent: configuration.taxRatePercent,
+                taxCurrencyCode: configuration.taxCurrency,
+                fxRateToTaxCurrency: configuration.fxRateToTaxCurrency,
                 targetExtraSharesPercent: configuration.targetExtraSharesPercent,
                 sellFeeTotal: configuration.sellFeeTotal,
                 buyFeeTotal: configuration.buyFeeTotal,
@@ -155,7 +187,10 @@ struct BuybackProvider: AppIntentTimelineProvider {
             sellPrice: configuration.fallbackSellPrice,
             gainAtSellPercent: configuration.gainAtSellPercent,
             sharesToSell: 1,
+            taxProfile: configuration.taxProfile.taxProfile,
             taxRatePercent: configuration.taxRatePercent,
+            taxCurrencyCode: configuration.taxCurrency,
+            fxRateToTaxCurrency: configuration.fxRateToTaxCurrency,
             targetExtraSharesPercent: configuration.targetExtraSharesPercent,
             sellFeeTotal: configuration.sellFeeTotal,
             buyFeeTotal: configuration.buyFeeTotal,
@@ -220,12 +255,19 @@ struct BuybackWidgetEntryView: View {
         var components = URLComponents()
         components.scheme = "buybackcalculator"
         components.host = "calculator"
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "symbol", value: entry.symbol),
             URLQueryItem(name: "price", value: activePrice.inputString),
             URLQueryItem(name: "gain", value: entry.gainAtSellPercent.inputString),
             URLQueryItem(name: "fallbackPrice", value: entry.fallbackSellPrice.inputString)
         ]
+        if let calculation = entry.calculation {
+            queryItems.append(URLQueryItem(name: "taxProfile", value: calculation.taxProfile.rawValue))
+            queryItems.append(URLQueryItem(name: "taxRate", value: calculation.taxRatePercent.inputString))
+            queryItems.append(URLQueryItem(name: "taxCurrency", value: calculation.taxCurrencyCode))
+            queryItems.append(URLQueryItem(name: "fxRate", value: calculation.fxRateToTaxCurrency.inputString))
+        }
+        components.queryItems = queryItems
         return components.url
     }
 

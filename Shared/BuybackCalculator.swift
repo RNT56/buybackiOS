@@ -1,11 +1,89 @@
 import Foundation
 
+enum TaxProfile: String, Codable, CaseIterable, Identifiable, Sendable {
+    case germany
+    case usLongTerm
+    case usShortTerm
+    case custom
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .germany:
+            return "Germany"
+        case .usLongTerm:
+            return "US long"
+        case .usShortTerm:
+            return "US short"
+        case .custom:
+            return "Custom"
+        }
+    }
+
+    var defaultTaxRatePercent: Double {
+        switch self {
+        case .germany:
+            return BuybackCalculator.fixedTaxRatePercent
+        case .usLongTerm:
+            return 15
+        case .usShortTerm:
+            return 24
+        case .custom:
+            return BuybackCalculator.fixedTaxRatePercent
+        }
+    }
+
+    func resolvedTaxRatePercent(customRatePercent: Double) -> Double {
+        self == .custom ? customRatePercent : defaultTaxRatePercent
+    }
+}
+
+struct TaxLot: Codable, Equatable, Identifiable, Sendable {
+    var id: UUID
+    var shares: Double
+    var averageCostBasis: Double
+
+    init(
+        id: UUID = UUID(),
+        shares: Double,
+        averageCostBasis: Double
+    ) {
+        self.id = id
+        self.shares = shares
+        self.averageCostBasis = averageCostBasis
+    }
+
+    var isValid: Bool {
+        shares.isFinite && averageCostBasis.isFinite && shares > 0 && averageCostBasis > 0
+    }
+
+    static func weightedAverageCostBasis(_ lots: [TaxLot]) -> Double? {
+        let validLots = lots.filter(\.isValid)
+        let shareCount = validLots.reduce(0) { $0 + $1.shares }
+        guard shareCount > 0 else { return nil }
+
+        let costBasisTotal = validLots.reduce(0) { partial, lot in
+            partial + lot.shares * lot.averageCostBasis
+        }
+
+        return costBasisTotal / shareCount
+    }
+
+    static func totalShares(_ lots: [TaxLot]) -> Double {
+        lots.filter(\.isValid).reduce(0) { $0 + $1.shares }
+    }
+}
+
 struct BuybackInputs: Codable, Equatable, Sendable {
     var symbol: String
     var sharesToSell: Double
     var averageCostBasis: Double
     var sellPrice: Double
+    var taxProfile: TaxProfile
     var taxRatePercent: Double
+    var taxCurrencyCode: String
+    var fxRateToTaxCurrency: Double
     var targetExtraSharesPercent: Double
     var sellFeeTotal: Double
     var buyFeeTotal: Double
@@ -17,7 +95,10 @@ struct BuybackInputs: Codable, Equatable, Sendable {
         sharesToSell: Double = BuybackCalculator.defaultSharesToSell,
         averageCostBasis: Double = BuybackCalculator.defaultAverageCostBasis,
         sellPrice: Double = BuybackCalculator.defaultSellPrice,
+        taxProfile: TaxProfile = BuybackCalculator.defaultTaxProfile,
         taxRatePercent: Double = BuybackCalculator.fixedTaxRatePercent,
+        taxCurrencyCode: String = BuybackCalculator.defaultCurrencyCode,
+        fxRateToTaxCurrency: Double = BuybackCalculator.defaultFXRateToTaxCurrency,
         targetExtraSharesPercent: Double = BuybackCalculator.fixedTargetExtraSharesPercent,
         sellFeeTotal: Double = BuybackCalculator.defaultSellFeeTotal,
         buyFeeTotal: Double = BuybackCalculator.defaultBuyFeeTotal,
@@ -28,7 +109,10 @@ struct BuybackInputs: Codable, Equatable, Sendable {
         self.sharesToSell = sharesToSell
         self.averageCostBasis = averageCostBasis
         self.sellPrice = sellPrice
+        self.taxProfile = taxProfile
         self.taxRatePercent = taxRatePercent
+        self.taxCurrencyCode = taxCurrencyCode.normalizedCurrencyCode
+        self.fxRateToTaxCurrency = fxRateToTaxCurrency
         self.targetExtraSharesPercent = targetExtraSharesPercent
         self.sellFeeTotal = sellFeeTotal
         self.buyFeeTotal = buyFeeTotal
@@ -44,7 +128,10 @@ struct BuybackCalculation: Equatable, Identifiable, Sendable {
             sharesToSell.keyString,
             averageCostBasis.keyString,
             sellPrice.keyString,
+            taxProfile.rawValue,
             taxRatePercent.keyString,
+            taxCurrencyCode,
+            fxRateToTaxCurrency.keyString,
             targetExtraSharesPercent.keyString,
             sellFeeTotal.keyString,
             buyFeeTotal.keyString,
@@ -58,7 +145,10 @@ struct BuybackCalculation: Equatable, Identifiable, Sendable {
     let averageCostBasis: Double
     let sellPrice: Double
     let gainAtSellPercent: Double
+    let taxProfile: TaxProfile
     let taxRatePercent: Double
+    let taxCurrencyCode: String
+    let fxRateToTaxCurrency: Double
     let targetExtraSharesPercent: Double
     let sellFeeTotal: Double
     let buyFeeTotal: Double
@@ -70,7 +160,9 @@ struct BuybackCalculation: Equatable, Identifiable, Sendable {
     let netSaleProceeds: Double
     let taxableGainPerShare: Double
     let taxableGainTotal: Double
+    let taxableGainInTaxCurrency: Double
     let taxAmount: Double
+    let taxAmountInTaxCurrency: Double
     let afterTaxCash: Double
     let afterTaxCashPerShare: Double
     let cashAvailableForBuyback: Double
@@ -116,11 +208,13 @@ enum BuybackCalculator {
     static let defaultAverageCostBasis: Double = 125
     static let defaultSellPrice: Double = 185
     static let defaultCurrencyCode = "USD"
+    static let defaultTaxProfile = TaxProfile.germany
     static let fixedTaxRatePercent: Double = 27
     static let fixedTargetExtraSharesPercent: Double = 2.5
     static let defaultSellFeeTotal: Double = 0
     static let defaultBuyFeeTotal: Double = 0
     static let defaultSlippagePercent: Double = 0
+    static let defaultFXRateToTaxCurrency: Double = 1
 
     static var defaultInputs: BuybackInputs {
         BuybackInputs()
@@ -136,7 +230,10 @@ enum BuybackCalculator {
             sharesToSell: inputs.sharesToSell,
             averageCostBasis: inputs.averageCostBasis,
             sellPrice: inputs.sellPrice,
+            taxProfile: inputs.taxProfile,
             taxRatePercent: inputs.taxRatePercent,
+            taxCurrencyCode: inputs.taxCurrencyCode,
+            fxRateToTaxCurrency: inputs.fxRateToTaxCurrency,
             targetExtraSharesPercent: inputs.targetExtraSharesPercent,
             sellFeeTotal: inputs.sellFeeTotal,
             buyFeeTotal: inputs.buyFeeTotal,
@@ -150,7 +247,10 @@ enum BuybackCalculator {
         sharesToSell: Double,
         averageCostBasis: Double,
         sellPrice: Double,
+        taxProfile: TaxProfile = defaultTaxProfile,
         taxRatePercent: Double = fixedTaxRatePercent,
+        taxCurrencyCode: String = defaultCurrencyCode,
+        fxRateToTaxCurrency: Double = defaultFXRateToTaxCurrency,
         targetExtraSharesPercent: Double = fixedTargetExtraSharesPercent,
         sellFeeTotal: Double = defaultSellFeeTotal,
         buyFeeTotal: Double = defaultBuyFeeTotal,
@@ -161,6 +261,7 @@ enum BuybackCalculator {
               averageCostBasis.isFinite,
               sellPrice.isFinite,
               taxRatePercent.isFinite,
+              fxRateToTaxCurrency.isFinite,
               targetExtraSharesPercent.isFinite,
               sellFeeTotal.isFinite,
               buyFeeTotal.isFinite,
@@ -168,8 +269,7 @@ enum BuybackCalculator {
               sharesToSell > 0,
               averageCostBasis > 0,
               sellPrice > 0,
-              taxRatePercent >= 0,
-              taxRatePercent <= 100,
+              fxRateToTaxCurrency > 0,
               targetExtraSharesPercent >= 0,
               sellFeeTotal >= 0,
               buyFeeTotal >= 0,
@@ -180,13 +280,24 @@ enum BuybackCalculator {
 
         let normalizedSymbol = symbol.normalizedStockSymbol
         let normalizedCurrencyCode = currencyCode.normalizedCurrencyCode
+        let normalizedTaxCurrencyCode = taxCurrencyCode.normalizedCurrencyCode
+        let resolvedTaxRatePercent = taxProfile.resolvedTaxRatePercent(customRatePercent: taxRatePercent)
+        guard resolvedTaxRatePercent.isFinite,
+              resolvedTaxRatePercent >= 0,
+              resolvedTaxRatePercent <= 100
+        else {
+            return nil
+        }
+
         let gainAtSellPercent = ((sellPrice - averageCostBasis) / averageCostBasis) * 100
         let costBasisTotal = averageCostBasis * sharesToSell
         let grossProceeds = sellPrice * sharesToSell
         let netSaleProceeds = grossProceeds - sellFeeTotal
         let taxableGainTotal = max(0, netSaleProceeds - costBasisTotal)
         let taxableGainPerShare = taxableGainTotal / sharesToSell
-        let taxAmount = taxableGainTotal * taxRatePercent / 100
+        let taxableGainInTaxCurrency = taxableGainTotal * fxRateToTaxCurrency
+        let taxAmountInTaxCurrency = taxableGainInTaxCurrency * resolvedTaxRatePercent / 100
+        let taxAmount = taxAmountInTaxCurrency / fxRateToTaxCurrency
         let afterTaxCash = netSaleProceeds - taxAmount
         let afterTaxCashPerShare = afterTaxCash / sharesToSell
         let cashAvailableForBuyback = max(0, afterTaxCash - buyFeeTotal)
@@ -202,7 +313,10 @@ enum BuybackCalculator {
             averageCostBasis: averageCostBasis,
             sellPrice: sellPrice,
             gainAtSellPercent: gainAtSellPercent,
-            taxRatePercent: taxRatePercent,
+            taxProfile: taxProfile,
+            taxRatePercent: resolvedTaxRatePercent,
+            taxCurrencyCode: normalizedTaxCurrencyCode,
+            fxRateToTaxCurrency: fxRateToTaxCurrency,
             targetExtraSharesPercent: targetExtraSharesPercent,
             sellFeeTotal: sellFeeTotal,
             buyFeeTotal: buyFeeTotal,
@@ -213,7 +327,9 @@ enum BuybackCalculator {
             netSaleProceeds: netSaleProceeds,
             taxableGainPerShare: taxableGainPerShare,
             taxableGainTotal: taxableGainTotal,
+            taxableGainInTaxCurrency: taxableGainInTaxCurrency,
             taxAmount: taxAmount,
+            taxAmountInTaxCurrency: taxAmountInTaxCurrency,
             afterTaxCash: afterTaxCash,
             afterTaxCashPerShare: afterTaxCashPerShare,
             cashAvailableForBuyback: cashAvailableForBuyback,
@@ -230,7 +346,10 @@ enum BuybackCalculator {
         sellPrice: Double,
         gainAtSellPercent: Double,
         sharesToSell: Double = 1,
+        taxProfile: TaxProfile = defaultTaxProfile,
         taxRatePercent: Double = fixedTaxRatePercent,
+        taxCurrencyCode: String = defaultCurrencyCode,
+        fxRateToTaxCurrency: Double = defaultFXRateToTaxCurrency,
         targetExtraSharesPercent: Double = fixedTargetExtraSharesPercent,
         sellFeeTotal: Double = defaultSellFeeTotal,
         buyFeeTotal: Double = defaultBuyFeeTotal,
@@ -248,7 +367,10 @@ enum BuybackCalculator {
             sharesToSell: sharesToSell,
             averageCostBasis: costBasis,
             sellPrice: sellPrice,
+            taxProfile: taxProfile,
             taxRatePercent: taxRatePercent,
+            taxCurrencyCode: taxCurrencyCode,
+            fxRateToTaxCurrency: fxRateToTaxCurrency,
             targetExtraSharesPercent: targetExtraSharesPercent,
             sellFeeTotal: sellFeeTotal,
             buyFeeTotal: buyFeeTotal,
@@ -284,8 +406,13 @@ enum BuybackCalculator {
             return "Planned sale price must be greater than 0."
         }
 
-        guard inputs.taxRatePercent >= 0, inputs.taxRatePercent <= 100 else {
+        let resolvedTaxRatePercent = inputs.taxProfile.resolvedTaxRatePercent(customRatePercent: inputs.taxRatePercent)
+        guard resolvedTaxRatePercent >= 0, resolvedTaxRatePercent <= 100 else {
             return "Tax rate must be between 0% and 100%."
+        }
+
+        guard inputs.fxRateToTaxCurrency > 0 else {
+            return "FX rate must be greater than 0."
         }
 
         guard inputs.targetExtraSharesPercent >= 0 else {
