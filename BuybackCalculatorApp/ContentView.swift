@@ -190,11 +190,17 @@ struct ContentView: View {
                 contentLayout
                     .frame(maxWidth: usesSplitLayout ? 1180 : 760, alignment: .leading)
                     .padding(.horizontal, 18)
-                    .padding(.vertical, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, floatingDockScrollPadding)
             }
             .background {
                 LiquidGlassBackground()
                     .ignoresSafeArea()
+            }
+            .overlay(alignment: .bottom) {
+                launchActionDock(calculation: calculation)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 12)
             }
             .navigationTitle("Buy-Back")
             .navigationBarTitleDisplayMode(.inline)
@@ -386,7 +392,6 @@ struct ContentView: View {
                 }
 
                 inputPanel
-                launchActionDock(calculation: calculation)
             }
         }
     }
@@ -395,8 +400,11 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 18) {
             header
             inputPanel
-            launchActionDock(calculation: calculation)
         }
+    }
+
+    private var floatingDockScrollPadding: CGFloat {
+        104
     }
 
     @ViewBuilder
@@ -419,8 +427,6 @@ struct ContentView: View {
 
     private func launchActionDock(calculation: BuybackCalculation?) -> some View {
         HStack(spacing: 14) {
-            Spacer(minLength: 0)
-
             iconActionButton(
                 icon: .asset,
                 tint: LiquidPalette.blue,
@@ -453,8 +459,6 @@ struct ContentView: View {
             ) {
                 activeSheet = .settings
             }
-
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 4)
     }
