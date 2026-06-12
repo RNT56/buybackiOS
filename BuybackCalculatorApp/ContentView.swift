@@ -194,19 +194,21 @@ struct ContentView: View {
                     Button {
                         settingsPresented = true
                     } label: {
-                        IconLabel("Settings", icon: .settings)
+                        LiquidGlassActionIcon(icon: .settings, tint: LiquidPalette.blue)
                     }
-                    .buttonStyle(.liquidGlass)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Settings")
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         refreshSelectedQuote()
                     } label: {
-                        IconLabel("Refresh Price", icon: .refresh)
+                        LiquidGlassActionIcon(icon: .refresh)
                     }
-                    .buttonStyle(.liquidGlass)
+                    .buttonStyle(.plain)
                     .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
+                    .accessibilityLabel("Refresh price")
                 }
 
                 ToolbarItemGroup(placement: .keyboard) {
@@ -447,10 +449,9 @@ struct ContentView: View {
                 apiKeysExpanded = true
                 settingsPresented = true
             } label: {
-                BuybackIcon(.settings)
-                    .frame(width: 18, height: 18)
+                LiquidGlassActionIcon(icon: .settings, tint: LiquidPalette.blue, size: 38)
             }
-            .buttonStyle(.liquidGlass)
+            .buttonStyle(.plain)
             .accessibilityLabel("Open API key settings")
         }
         .liquidSurface()
@@ -495,20 +496,22 @@ struct ContentView: View {
                         configureLookupClient()
                         lookup.scheduleSearch(query: assetQuery)
                     } label: {
-                        IconLabel("Save", icon: .save)
+                        LiquidGlassActionIcon(icon: .save, size: 44)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.liquidGlass)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Save API keys")
 
                     Button(role: .destructive) {
                         apiKeys.clear()
                         configureLookupClient()
                         lookup.scheduleSearch(query: assetQuery)
                     } label: {
-                        IconLabel("Clear", icon: .clear)
+                        LiquidGlassActionIcon(icon: .clear, tint: .red, size: 44)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.liquidGlass)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear API keys")
                 }
 
                 StatusRow(message: apiKeyStatusMessage)
@@ -704,11 +707,12 @@ struct ContentView: View {
                     Button {
                         refreshSelectedQuote()
                     } label: {
-                        IconLabel("Refresh selected price", icon: .refresh)
+                        LiquidGlassActionIcon(icon: .refresh, size: 44)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.liquidGlass)
+                    .buttonStyle(.plain)
                     .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
+                    .accessibilityLabel("Refresh selected price")
                 }
                 .padding(.top, 12)
             } label: {
@@ -1053,10 +1057,9 @@ struct ContentView: View {
                 Button {
                     saveScenario(calculation)
                 } label: {
-                    BuybackIcon(.save)
-                        .frame(width: 18, height: 18)
+                    LiquidGlassActionIcon(icon: .save, size: 40)
                 }
-                .buttonStyle(.liquidGlass)
+                .buttonStyle(.plain)
                 .accessibilityLabel("Save current scenario")
             }
 
@@ -1103,10 +1106,9 @@ struct ContentView: View {
                     )
                     evaluateAlert(calculation)
                 } label: {
-                    BuybackIcon(.alertArmed)
-                        .frame(width: 18, height: 18)
+                    LiquidGlassActionIcon(icon: .alertArmed, tint: .orange, size: 40)
                 }
-                .buttonStyle(.liquidGlass)
+                .buttonStyle(.plain)
                 .accessibilityLabel("Arm alert at buy-back limit")
             }
 
@@ -1135,11 +1137,12 @@ struct ContentView: View {
                         evaluateAlert(calculation)
                     }
                 } label: {
-                    IconLabel("Arm", icon: .selected)
+                    LiquidGlassActionIcon(icon: .selected, size: 44)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.liquidGlass)
+                .buttonStyle(.plain)
                 .frame(height: 52)
+                .accessibilityLabel("Arm alert")
             }
 
             if let alert = alerts.alert(for: calculation.symbol), alert.isEnabled {
@@ -1152,10 +1155,11 @@ struct ContentView: View {
                 Button(role: .destructive) {
                     alerts.disable(symbol: calculation.symbol)
                 } label: {
-                    IconLabel("Disable alert", icon: .alertOff)
+                    LiquidGlassActionIcon(icon: .alertOff, tint: .red, size: 44)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.liquidGlass)
+                .buttonStyle(.plain)
+                .accessibilityLabel("Disable alert")
             }
         }
         .liquidSurface()
@@ -1196,10 +1200,9 @@ struct ContentView: View {
             Button {
                 WidgetCenter.shared.reloadAllTimelines()
             } label: {
-                BuybackIcon(.refresh)
-                    .frame(width: 18, height: 18)
+                LiquidGlassActionIcon(icon: .refresh, size: 38)
             }
-            .buttonStyle(.liquidGlass)
+            .buttonStyle(.plain)
             .accessibilityLabel("Reload widgets")
         }
         .liquidSurface()
@@ -1597,10 +1600,9 @@ private struct SavedScenarioRow: View {
             .buttonStyle(.plain)
 
             Button(role: .destructive, action: onDelete) {
-                BuybackIcon(.clear)
-                    .frame(width: 18, height: 18)
+                LiquidGlassActionIcon(icon: .clear, tint: .red, size: 38)
             }
-            .buttonStyle(.liquidGlass)
+            .buttonStyle(.plain)
             .accessibilityLabel("Delete saved scenario")
         }
         .padding(.horizontal, 11)

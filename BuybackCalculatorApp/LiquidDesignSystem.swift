@@ -52,58 +52,8 @@ struct LiquidGlassBackground: View {
                     .frame(height: 240)
                 }
 
-                MarketGridOverlay()
-                    .opacity(0.42)
-                    .blendMode(.softLight)
             }
         }
-    }
-}
-
-private struct MarketGridOverlay: View {
-    var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                gridPath(size: proxy.size)
-                    .stroke(.white.opacity(0.16), lineWidth: 0.6)
-
-                trendPath(size: proxy.size)
-                    .stroke(LiquidPalette.accent.opacity(0.18), lineWidth: 2)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-
-    private func gridPath(size: CGSize) -> Path {
-        var grid = Path()
-        let rowHeight = max(size.height / 18, 28)
-        var y: CGFloat = 0
-        while y <= size.height {
-            grid.move(to: CGPoint(x: 0, y: y))
-            grid.addLine(to: CGPoint(x: size.width, y: y))
-            y += rowHeight
-        }
-
-        let columnWidth = max(size.width / 9, 42)
-        var x: CGFloat = 0
-        while x <= size.width {
-            grid.move(to: CGPoint(x: x, y: 0))
-            grid.addLine(to: CGPoint(x: x, y: size.height))
-            x += columnWidth
-        }
-
-        return grid
-    }
-
-    private func trendPath(size: CGSize) -> Path {
-        var trend = Path()
-        trend.move(to: CGPoint(x: 0, y: size.height * 0.58))
-        trend.addCurve(
-            to: CGPoint(x: size.width, y: size.height * 0.34),
-            control1: CGPoint(x: size.width * 0.25, y: size.height * 0.47),
-            control2: CGPoint(x: size.width * 0.62, y: size.height * 0.68)
-        )
-        return trend
     }
 }
 
@@ -156,6 +106,21 @@ struct LiquidGlassIcon: View {
                         .shadow(color: tint.opacity(0.14), radius: 10, y: 4)
                 }
             }
+    }
+}
+
+struct LiquidGlassActionIcon: View {
+    @Environment(\.isEnabled) private var isEnabled
+
+    let icon: BuybackIconKind
+    var tint: Color = LiquidPalette.accent
+    var size: CGFloat = 42
+
+    var body: some View {
+        LiquidGlassIcon(icon: icon, tint: tint, size: size)
+            .frame(width: size, height: size)
+            .contentShape(Circle())
+            .opacity(isEnabled ? 1 : 0.38)
     }
 }
 
@@ -230,57 +195,13 @@ struct DropGauge: View {
                     .font(.caption.monospacedDigit().weight(.bold))
             }
 
-            GeometryReader { proxy in
-                let width = max(10, proxy.size.width * progress)
-
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(.primary.opacity(0.08))
-
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [LiquidPalette.amber, LiquidPalette.accent],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: width)
-                        .shadow(color: LiquidPalette.accent.opacity(0.28), radius: 8, y: 2)
-                }
-            }
-            .frame(height: 10)
+            ProgressView(value: progress)
+                .progressViewStyle(.linear)
+                .tint(LiquidPalette.accent)
+                .frame(height: 10)
+                .accessibilityLabel("Required pullback")
+                .accessibilityValue(dropPercent.percentString)
         }
-    }
-}
-
-struct LiquidGlassButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.tint)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .frame(minHeight: 42)
-            .background {
-                let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-                shape
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground).opacity(configuration.isPressed ? 0.78 : 0.58))
-                    .overlay {
-                        shape.stroke(.white.opacity(configuration.isPressed ? 0.30 : 0.20), lineWidth: 0.8)
-                    }
-                    .shadow(color: .black.opacity(configuration.isPressed ? 0.03 : 0.07), radius: configuration.isPressed ? 4 : 10, y: configuration.isPressed ? 1 : 4)
-            }
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .opacity(isEnabled ? 1 : 0.42)
-    }
-}
-
-extension ButtonStyle where Self == LiquidGlassButtonStyle {
-    static var liquidGlass: LiquidGlassButtonStyle {
-        LiquidGlassButtonStyle()
     }
 }
 
