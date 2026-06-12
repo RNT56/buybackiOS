@@ -368,10 +368,13 @@ struct ContentView: View {
                 Spacer(minLength: 8)
             }
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], alignment: .leading, spacing: 8) {
-                GlassBadge(title: "Price", value: sellPrice.map { $0.moneyString(currencyCode: activeCurrencyCode) } ?? "Missing")
-                GlassBadge(title: "Tax", value: (effectiveTaxRatePercent?.inputString ?? parsedText(taxRateText)) + "%")
-                GlassBadge(title: "Target", value: "+" + parsedText(targetExtraText) + "%")
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    GlassBadge(title: "Price", value: sellPrice.map { $0.moneyString(currencyCode: activeCurrencyCode) } ?? "Missing")
+                    GlassBadge(title: "Tax", value: (effectiveTaxRatePercent?.inputString ?? parsedText(taxRateText)) + "%")
+                    GlassBadge(title: "Target", value: "+" + parsedText(targetExtraText) + "%")
+                }
+
                 if (sellFeeTotal ?? 0) + (buyFeeTotal ?? 0) > 0 || (slippagePercent ?? 0) > 0 {
                     GlassBadge(title: "Costs", value: ((sellFeeTotal ?? 0) + (buyFeeTotal ?? 0)).moneyString(currencyCode: activeCurrencyCode))
                 }
@@ -527,13 +530,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 16) {
             SectionTitle("Calculator", icon: .calculator)
 
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12)
-                ],
-                spacing: 12
-            ) {
+            VStack(alignment: .leading, spacing: 12) {
                 decimalField(
                     "Current price",
                     text: $sellPriceText,
@@ -576,13 +573,7 @@ struct ContentView: View {
             DisclosureGroup(isExpanded: $advancedExpanded) {
                 VStack(alignment: .leading, spacing: 18) {
                     advancedGroup("Position", icon: .shares) {
-                        LazyVGrid(
-                            columns: [
-                                GridItem(.flexible(), spacing: 12),
-                                GridItem(.flexible(), spacing: 12)
-                            ],
-                            spacing: 12
-                        ) {
+                        VStack(alignment: .leading, spacing: 12) {
                             decimalField("Shares", text: $sharesText, suffix: "sh", icon: .shares, field: .shares, isDisabled: taxLotsEnabled)
                             decimalField(
                                 "Extra shares target",
@@ -643,13 +634,7 @@ struct ContentView: View {
                             .pickerStyle(.segmented)
                         }
 
-                        LazyVGrid(
-                            columns: [
-                                GridItem(.flexible(), spacing: 12),
-                                GridItem(.flexible(), spacing: 12)
-                            ],
-                            spacing: 12
-                        ) {
+                        VStack(alignment: .leading, spacing: 12) {
                             decimalField("Tax rate", text: $taxRateText, suffix: "%", icon: .taxRate, field: .taxRate, isDisabled: taxProfile != .custom)
 
                             textField(
@@ -671,13 +656,7 @@ struct ContentView: View {
                     }
 
                     advancedGroup("Costs", icon: .costs) {
-                        LazyVGrid(
-                            columns: [
-                                GridItem(.flexible(), spacing: 12),
-                                GridItem(.flexible(), spacing: 12)
-                            ],
-                            spacing: 12
-                        ) {
+                        VStack(alignment: .leading, spacing: 12) {
                             decimalField(
                                 "Slippage buffer",
                                 text: $slippageText,
@@ -830,13 +809,7 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
 
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12)
-                ],
-                spacing: 12
-            ) {
+            VStack(alignment: .leading, spacing: 12) {
                 decimalField("Shares", text: shares, suffix: "sh", icon: .shares, field: sharesField)
                 decimalField("Basis", text: basis, suffix: activeCurrencyCode, icon: .basis, field: basisField)
             }
@@ -1112,13 +1085,7 @@ struct ContentView: View {
                 .accessibilityLabel("Arm alert at buy-back limit")
             }
 
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12)
-                ],
-                spacing: 12
-            ) {
+            VStack(alignment: .leading, spacing: 12) {
                 decimalField(
                     "Alert price",
                     text: $alertPriceText,
