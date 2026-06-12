@@ -33,6 +33,8 @@ targets:
     entitlements:
       path: BuybackCalculatorApp/BuybackCalculator.entitlements
       properties:
+        com.apple.security.application-groups:
+          - group.com.schtack.BuybackCalculator
         keychain-access-groups:
           - $(AppIdentifierPrefix)com.schtack.BuybackCalculator.apiKeys
     info:
@@ -83,6 +85,8 @@ targets:
     entitlements:
       path: BuybackWidgetExtension/BuybackWidgetExtension.entitlements
       properties:
+        com.apple.security.application-groups:
+          - group.com.schtack.BuybackCalculator
         keychain-access-groups:
           - $(AppIdentifierPrefix)com.schtack.BuybackCalculator.apiKeys
     info:

@@ -1161,6 +1161,7 @@ struct ContentView: View {
                             loadScenario(scenario)
                         } onDelete: {
                             scenarios.delete(scenario)
+                            WidgetCenter.shared.reloadAllTimelines()
                             scenarioMessage = .info("Scenario deleted.")
                         }
                     }
@@ -1262,7 +1263,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Home Screen widget")
                     .font(.headline)
-                Text("Configure symbol, gain, and fallback price. The widget refreshes live quotes when available.")
+                Text("Save scenarios to fill the portfolio widget. Existing single-stock widgets can still be configured in widget settings.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1493,6 +1494,7 @@ struct ContentView: View {
         )
 
         scenarios.save(scenario)
+        WidgetCenter.shared.reloadAllTimelines()
         scenarioMessage = .info("Scenario saved.")
     }
 

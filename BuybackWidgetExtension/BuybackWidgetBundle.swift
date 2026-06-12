@@ -5,5 +5,6 @@ import SwiftUI
 struct BuybackWidgetBundle: WidgetBundle {
     var body: some Widget {
         BuybackWidget()
+        BuybackPortfolioWidget()
     }
 }

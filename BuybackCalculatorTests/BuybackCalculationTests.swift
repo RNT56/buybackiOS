@@ -177,4 +177,45 @@ final class BuybackCalculationTests: XCTestCase {
         XCTAssertEqual(calculation.taxAmount, 76, accuracy: 0.0001)
         XCTAssertEqual(calculation.maximumBuybackPrice, 184.8, accuracy: 0.0001)
     }
+
+    func testSavedScenarioStorageRoundTripsPortfolioSource() throws {
+        let suiteName = "buybackCalculator.tests.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let scenario = SavedBuybackScenario(
+            id: UUID(uuidString: "A1E06611-FD3E-49D9-8F3B-B233B439B964") ?? UUID(),
+            name: "Apple",
+            savedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            assetQuery: "AAPL",
+            selectedAsset: MarketAsset(
+                symbol: "AAPL",
+                name: "Apple Inc.",
+                exchange: "US",
+                currencyCode: "USD",
+                source: .finnhub
+            ),
+            manualPriceEnabled: false,
+            symbol: "AAPL",
+            currencyCode: "USD",
+            sellPrice: 185,
+            gainPercent: 463.10,
+            sharesToSell: 1,
+            taxRatePercent: 27,
+            targetExtraSharesPercent: 2.5,
+            sellFeeTotal: 0,
+            buyFeeTotal: 0,
+            slippagePercent: 0
+        )
+
+        SavedScenarioStorage.save([scenario], userDefaults: userDefaults)
+
+        let loaded = SavedScenarioStorage.load(userDefaults: userDefaults)
+        XCTAssertEqual(loaded.count, 1)
+        XCTAssertEqual(loaded[0], scenario)
+        let calculation = try XCTUnwrap(loaded[0].calculation)
+        XCTAssertEqual(calculation.maximumBuybackPrice, 140.4103, accuracy: 0.0001)
+    }
 }

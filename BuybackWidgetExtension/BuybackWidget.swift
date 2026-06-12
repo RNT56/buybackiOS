@@ -60,6 +60,11 @@ struct BuybackWidgetConfiguration: WidgetConfigurationIntent {
     var slippagePercent: Double
 }
 
+struct BuybackPortfolioWidgetConfiguration: WidgetConfigurationIntent {
+    static let title: LocalizedStringResource = "Buy-Back Portfolio"
+    static let description = IntentDescription("Display saved assets with live prices and calculated buy-back limits.")
+}
+
 struct BuybackEntry: TimelineEntry, Sendable {
     let date: Date
     let query: String
@@ -68,6 +73,23 @@ struct BuybackEntry: TimelineEntry, Sendable {
     let assetExchange: String?
     let gainAtSellPercent: Double
     let fallbackSellPrice: Double
+    let quote: MarketQuote?
+    let priceStatus: WidgetPriceStatus
+    let calculation: BuybackCalculation?
+}
+
+struct BuybackPortfolioEntry: TimelineEntry {
+    let date: Date
+    let rows: [BuybackPortfolioRow]
+    let hasSavedScenarios: Bool
+}
+
+struct BuybackPortfolioRow: Identifiable, Equatable {
+    let id: UUID
+    let title: String
+    let symbol: String
+    let assetName: String?
+    let assetExchange: String?
     let quote: MarketQuote?
     let priceStatus: WidgetPriceStatus
     let calculation: BuybackCalculation?
@@ -404,6 +426,167 @@ struct BuybackProvider: AppIntentTimelineProvider {
     }
 }
 
+struct BuybackPortfolioProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> BuybackPortfolioEntry {
+        .preview
+    }
+
+    func snapshot(
+        for configuration: BuybackPortfolioWidgetConfiguration,
+        in context: Context
+    ) async -> BuybackPortfolioEntry {
+        .preview
+    }
+
+    func timeline(
+        for configuration: BuybackPortfolioWidgetConfiguration,
+        in context: Context
+    ) async -> Timeline<BuybackPortfolioEntry> {
+        let entry = await makeEntry(for: context)
+        return Timeline(
+            entries: [entry],
+            policy: .after(Date().addingTimeInterval(30 * 60))
+        )
+    }
+
+    private func makeEntry(for context: Context, date: Date = .now) async -> BuybackPortfolioEntry {
+        let savedScenarios = SavedScenarioStorage.load()
+        guard !savedScenarios.isEmpty else {
+            return BuybackPortfolioEntry(date: date, rows: [], hasSavedScenarios: false)
+        }
+
+        let client = MarketDataClientFactory.make()
+        var rows: [BuybackPortfolioRow] = []
+        for scenario in savedScenarios.prefix(maxRows(for: context.family)) {
+            rows.append(await makeRow(for: scenario, client: client))
+        }
+
+        return BuybackPortfolioEntry(date: date, rows: rows, hasSavedScenarios: true)
+    }
+
+    private func makeRow(
+        for scenario: SavedBuybackScenario,
+        client: CompositeMarketDataClient?
+    ) async -> BuybackPortfolioRow {
+        let asset = scenario.portfolioAsset
+        let quote: MarketQuote?
+        let priceStatus: WidgetPriceStatus
+
+        if let client {
+            do {
+                quote = try await client.quote(for: asset)
+                priceStatus = .live
+            } catch {
+                quote = nil
+                priceStatus = .fallback(fallbackReason(for: error))
+            }
+        } else {
+            quote = nil
+            priceStatus = .fallback("Missing key")
+        }
+
+        return BuybackPortfolioRow(
+            id: scenario.id,
+            title: scenario.displayTitle,
+            symbol: scenario.displaySymbol,
+            assetName: scenario.selectedAsset?.name.trimmedForDisplay.nilIfEmpty,
+            assetExchange: scenario.selectedAsset?.exchange.trimmedForDisplay.nilIfEmpty,
+            quote: quote,
+            priceStatus: priceStatus,
+            calculation: scenario.portfolioCalculation(using: quote)
+        )
+    }
+
+    private func maxRows(for family: WidgetFamily) -> Int {
+        switch family {
+        case .systemSmall:
+            return 2
+        case .systemLarge:
+            return 5
+        default:
+            return 3
+        }
+    }
+
+    private func fallbackReason(for error: Error) -> String {
+        if let marketDataError = error as? MarketDataError {
+            switch marketDataError {
+            case .missingAPIKey:
+                return "Missing key"
+            case .rateLimited:
+                return "Rate limit"
+            case .noResults:
+                return "No result"
+            case .quoteUnavailable:
+                return "No quote"
+            case .badStatusCode(let statusCode):
+                return "HTTP \(statusCode)"
+            case .invalidURL, .invalidResponse:
+                return "Data error"
+            }
+        }
+        return "Saved price"
+    }
+}
+
+private extension SavedBuybackScenario {
+    var portfolioAsset: MarketAsset {
+        if let selectedAsset {
+            return selectedAsset
+        }
+
+        return MarketAsset(
+            symbol: displaySymbol,
+            name: displayTitle,
+            currencyCode: currencyCode,
+            source: .finnhub
+        )
+    }
+
+    func portfolioCalculation(using quote: MarketQuote?) -> BuybackCalculation? {
+        let currentPrice = quote?.price ?? sellPrice
+        let currentCurrencyCode = quote?.currencyCode ?? currencyCode
+
+        if taxLotsEnabled,
+           let lotAverageCostBasis = TaxLot.weightedAverageCostBasis(taxLots) {
+            let lotShares = TaxLot.totalShares(taxLots)
+            guard lotShares > 0 else { return nil }
+
+            return BuybackCalculator.calculate(
+                symbol: displaySymbol,
+                sharesToSell: lotShares,
+                averageCostBasis: lotAverageCostBasis,
+                sellPrice: currentPrice,
+                taxProfile: taxProfile,
+                taxRatePercent: taxRatePercent,
+                taxCurrencyCode: taxCurrencyCode,
+                fxRateToTaxCurrency: fxRateToTaxCurrency,
+                targetExtraSharesPercent: targetExtraSharesPercent,
+                sellFeeTotal: sellFeeTotal,
+                buyFeeTotal: buyFeeTotal,
+                slippagePercent: slippagePercent,
+                currencyCode: currentCurrencyCode
+            )
+        }
+
+        return BuybackCalculator.calculate(
+            symbol: displaySymbol,
+            sellPrice: currentPrice,
+            gainAtSellPercent: gainPercent,
+            sharesToSell: sharesToSell,
+            taxProfile: taxProfile,
+            taxRatePercent: taxRatePercent,
+            taxCurrencyCode: taxCurrencyCode,
+            fxRateToTaxCurrency: fxRateToTaxCurrency,
+            targetExtraSharesPercent: targetExtraSharesPercent,
+            sellFeeTotal: sellFeeTotal,
+            buyFeeTotal: buyFeeTotal,
+            slippagePercent: slippagePercent,
+            currencyCode: currentCurrencyCode
+        )
+    }
+}
+
 struct BuybackWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
 
@@ -609,6 +792,268 @@ struct BuybackWidgetEntryView: View {
 
             Spacer(minLength: 0)
         }
+    }
+}
+
+struct BuybackPortfolioWidgetEntryView: View {
+    @Environment(\.widgetFamily) private var family
+
+    let entry: BuybackPortfolioEntry
+
+    var body: some View {
+        Group {
+            if entry.rows.isEmpty {
+                emptyView
+            } else {
+                portfolioView
+            }
+        }
+        .padding(WidgetMetrics.contentPadding(for: family))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .containerBackground(for: .widget) {
+            BuybackWidgetBackground()
+        }
+        .widgetURL(primaryDeepLinkURL)
+    }
+
+    private var portfolioView: some View {
+        VStack(alignment: .leading, spacing: family == .systemSmall ? 7 : 9) {
+            PortfolioWidgetHeader(entry: entry)
+
+            ForEach(entry.rows.prefix(maxRows)) { row in
+                PortfolioAssetRow(row: row, compact: family == .systemSmall)
+            }
+
+            if family == .systemLarge {
+                Spacer(minLength: 0)
+                PortfolioWidgetFooter(entry: entry)
+            }
+        }
+    }
+
+    private var emptyView: some View {
+        VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 11) {
+            LiquidWidgetIcon(icon: .widget, tint: .teal, size: family == .systemSmall ? 30 : 36)
+
+            Text("Save assets")
+                .font(family == .systemSmall ? .headline.weight(.bold) : .title3.weight(.bold))
+                .lineLimit(1)
+                .widgetAccentable()
+
+            Text("Saved scenarios will appear here with live prices and buy-back limits.")
+                .font(family == .systemSmall ? .caption2 : .caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(family == .systemSmall ? 4 : 3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var maxRows: Int {
+        switch family {
+        case .systemSmall:
+            return 2
+        case .systemLarge:
+            return 5
+        default:
+            return 3
+        }
+    }
+
+    private var primaryDeepLinkURL: URL? {
+        guard let row = entry.rows.first,
+              let calculation = row.calculation
+        else {
+            return nil
+        }
+
+        var components = URLComponents()
+        components.scheme = "buybackcalculator"
+        components.host = "calculator"
+        components.queryItems = [
+            URLQueryItem(name: "symbol", value: row.symbol),
+            URLQueryItem(name: "price", value: calculation.sellPrice.inputString),
+            URLQueryItem(name: "gain", value: calculation.gainAtSellPercent.inputString),
+            URLQueryItem(name: "taxProfile", value: calculation.taxProfile.rawValue),
+            URLQueryItem(name: "taxRate", value: calculation.taxRatePercent.inputString),
+            URLQueryItem(name: "taxCurrency", value: calculation.taxCurrencyCode),
+            URLQueryItem(name: "fxRate", value: calculation.fxRateToTaxCurrency.inputString)
+        ]
+        return components.url
+    }
+}
+
+private struct PortfolioWidgetHeader: View {
+    @Environment(\.widgetFamily) private var family
+
+    let entry: BuybackPortfolioEntry
+
+    var body: some View {
+        HStack(spacing: 9) {
+            LiquidWidgetIcon(icon: .asset, tint: .teal, size: family == .systemSmall ? 27 : 31)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Portfolio")
+                    .font(family == .systemSmall ? .caption.weight(.bold) : .subheadline.weight(.bold))
+                    .lineLimit(1)
+                    .widgetAccentable()
+
+                if family != .systemSmall {
+                    Text(statusText)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 4)
+
+            Text(entry.date, style: .time)
+                .font(.caption2.monospacedDigit().weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var statusText: String {
+        let liveCount = entry.rows.filter { $0.priceStatus == .live }.count
+        guard liveCount > 0 else {
+            return "Saved prices"
+        }
+        return "\(liveCount) live / \(entry.rows.count)"
+    }
+}
+
+private struct PortfolioAssetRow: View {
+    @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    let row: BuybackPortfolioRow
+    let compact: Bool
+
+    private var tint: Color {
+        switch row.priceStatus {
+        case .live:
+            return renderingMode == .fullColor ? .teal : .primary
+        case .fallback:
+            return renderingMode == .fullColor ? .orange : .primary
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: compact ? 7 : 9) {
+            BuybackIcon(row.priceStatus.icon, tint: tint)
+                .frame(width: compact ? 17 : 19, height: compact ? 17 : 19)
+                .widgetAccentable()
+                .frame(width: compact ? 27 : 31, height: compact ? 27 : 31)
+                .background {
+                    Circle()
+                        .fill(tint.opacity(renderingMode == .fullColor ? 0.12 : 0.06))
+                        .glassEffect(.regular.tint(tint.opacity(0.12)), in: Circle())
+                }
+
+            VStack(alignment: .leading, spacing: compact ? 0 : 1) {
+                Text(row.symbol)
+                    .font(compact ? .caption.weight(.bold) : .subheadline.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                if !compact, let descriptor {
+                    Text(descriptor)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
+            }
+
+            Spacer(minLength: 4)
+
+            if let calculation = row.calculation {
+                VStack(alignment: .trailing, spacing: compact ? 0 : 1) {
+                    Text(calculation.maximumBuybackPrice.moneyString(currencyCode: calculation.currencyCode))
+                        .font((compact ? Font.caption : Font.callout).monospacedDigit().weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(compact ? 0.54 : 0.62)
+                        .widgetAccentable()
+
+                    Text(calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode))
+                        .font(.caption2.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.58)
+                }
+            } else {
+                Text("Check")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, compact ? 8 : 10)
+        .padding(.vertical, compact ? 6 : 8)
+        .widgetGlassSurface(
+            tint: tint,
+            radius: WidgetMetrics.surfaceRadius(for: family),
+            fillOpacity: renderingMode == .fullColor ? 0.085 : 0.052,
+            glassTintOpacity: renderingMode == .fullColor ? 0.10 : 0.035,
+            strokeOpacity: renderingMode == .fullColor ? 0.12 : 0.08
+        )
+    }
+
+    private var descriptor: String? {
+        let cleanedTitle = row.title.trimmedForDisplay
+        let title = cleanedTitle.caseInsensitiveCompare(row.symbol) == .orderedSame ? nil : cleanedTitle.nilIfEmpty
+        let exchange = row.assetExchange?.trimmedForDisplay.nilIfEmpty
+
+        switch (title, exchange) {
+        case (.some(let title), .some(let exchange)):
+            return "\(title) - \(exchange)"
+        case (.some(let title), .none):
+            return title
+        case (.none, .some(let exchange)):
+            return exchange
+        case (.none, .none):
+            return nil
+        }
+    }
+}
+
+private struct PortfolioWidgetFooter: View {
+    let entry: BuybackPortfolioEntry
+
+    var body: some View {
+        HStack(spacing: 6) {
+            BuybackIcon(.live, tint: .secondary)
+                .frame(width: 12, height: 12)
+
+            Text("Refreshes on WidgetKit schedule")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.74)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct LiquidWidgetIcon: View {
+    let icon: BuybackIconKind
+    let tint: Color
+    let size: CGFloat
+
+    var body: some View {
+        BuybackIcon(icon, tint: tint)
+            .frame(width: size * 0.58, height: size * 0.58)
+            .widgetAccentable()
+            .frame(width: size, height: size)
+            .background {
+                Circle()
+                    .fill(tint.opacity(0.12))
+                    .glassEffect(.regular.tint(tint.opacity(0.16)), in: Circle())
+            }
     }
 }
 
@@ -882,8 +1327,27 @@ struct BuybackWidget: Widget {
     }
 }
 
+struct BuybackPortfolioWidget: Widget {
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(
+            kind: BuybackWidgetKind.portfolio,
+            intent: BuybackPortfolioWidgetConfiguration.self,
+            provider: BuybackPortfolioProvider()
+        ) { entry in
+            BuybackPortfolioWidgetEntryView(entry: entry)
+        }
+        .configurationDisplayName("Buy-Back Portfolio")
+        .description("Displays saved assets with live prices and calculated buy-back limits when Finnhub is available.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .contentMarginsDisabled()
+        .containerBackgroundRemovable(true)
+        .supportedMountingStyles([.elevated, .recessed])
+    }
+}
+
 private enum BuybackWidgetKind {
     static let value = "BuybackWidget"
+    static let portfolio = "BuybackPortfolioWidget"
 }
 
 private extension BuybackEntry {
@@ -943,6 +1407,74 @@ private extension BuybackEntry {
     )
 }
 
+private extension BuybackPortfolioEntry {
+    static let preview = BuybackPortfolioEntry(
+        date: .now,
+        rows: [
+            BuybackPortfolioRow(
+                id: UUID(uuidString: "A73406C4-19AB-4CC8-B441-86F780F2C96D") ?? UUID(),
+                title: "Apple Inc.",
+                symbol: "AAPL",
+                assetName: "Apple Inc.",
+                assetExchange: "US",
+                quote: MarketQuote(
+                    symbol: "AAPL",
+                    price: 185,
+                    currencyCode: "USD",
+                    timestamp: .now,
+                    source: .finnhub,
+                    isStale: false,
+                    statusMessage: nil
+                ),
+                priceStatus: .live,
+                calculation: BuybackCalculator.calculate(
+                    symbol: "AAPL",
+                    sellPrice: 185,
+                    gainAtSellPercent: 463.10
+                )
+            ),
+            BuybackPortfolioRow(
+                id: UUID(uuidString: "B8612D95-6E3D-46C0-94B4-48FAF1FD71EC") ?? UUID(),
+                title: "Microsoft",
+                symbol: "MSFT",
+                assetName: "Microsoft",
+                assetExchange: "US",
+                quote: MarketQuote(
+                    symbol: "MSFT",
+                    price: 430,
+                    currencyCode: "USD",
+                    timestamp: .now,
+                    source: .finnhub,
+                    isStale: false,
+                    statusMessage: nil
+                ),
+                priceStatus: .live,
+                calculation: BuybackCalculator.calculate(
+                    symbol: "MSFT",
+                    sellPrice: 430,
+                    gainAtSellPercent: 155
+                )
+            ),
+            BuybackPortfolioRow(
+                id: UUID(uuidString: "B92D86F8-6C2B-4D2C-8E42-34DD2F7B27AA") ?? UUID(),
+                title: "SAP",
+                symbol: "SAP.DE",
+                assetName: "SAP SE",
+                assetExchange: "Germany",
+                quote: nil,
+                priceStatus: .fallback("Saved price"),
+                calculation: BuybackCalculator.calculate(
+                    symbol: "SAP.DE",
+                    sellPrice: 240,
+                    gainAtSellPercent: 82,
+                    currencyCode: "EUR"
+                )
+            )
+        ],
+        hasSavedScenarios: true
+    )
+}
+
 #Preview("Small", as: .systemSmall) {
     BuybackWidget()
 } timeline: {
@@ -965,4 +1497,16 @@ private extension BuybackEntry {
     BuybackWidget()
 } timeline: {
     BuybackEntry.previewInvalid
+}
+
+#Preview("Portfolio Medium", as: .systemMedium) {
+    BuybackPortfolioWidget()
+} timeline: {
+    BuybackPortfolioEntry.preview
+}
+
+#Preview("Portfolio Large", as: .systemLarge) {
+    BuybackPortfolioWidget()
+} timeline: {
+    BuybackPortfolioEntry.preview
 }

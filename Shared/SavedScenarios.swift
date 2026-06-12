@@ -1,7 +1,51 @@
 import Combine
 import Foundation
 
-struct SavedBuybackScenario: Codable, Equatable, Identifiable {
+enum BuybackSharedStorage {
+    static let appGroupIdentifier = "group.com.schtack.BuybackCalculator"
+
+    static var userDefaults: UserDefaults {
+        UserDefaults(suiteName: appGroupIdentifier) ?? .standard
+    }
+}
+
+enum SavedScenarioStorage {
+    static let storageKey = "buybackCalculator.savedScenarios"
+
+    static func load(userDefaults: UserDefaults = BuybackSharedStorage.userDefaults) -> [SavedBuybackScenario] {
+        if let scenarios = decode(from: userDefaults) {
+            return scenarios.sorted { $0.savedAt > $1.savedAt }
+        }
+
+        if userDefaults !== UserDefaults.standard,
+           let legacyScenarios = decode(from: .standard) {
+            save(legacyScenarios, userDefaults: userDefaults)
+            return legacyScenarios.sorted { $0.savedAt > $1.savedAt }
+        }
+
+        return []
+    }
+
+    static func save(_ scenarios: [SavedBuybackScenario], userDefaults: UserDefaults = BuybackSharedStorage.userDefaults) {
+        guard let data = try? JSONEncoder().encode(scenarios) else {
+            return
+        }
+
+        userDefaults.set(data, forKey: storageKey)
+    }
+
+    private static func decode(from userDefaults: UserDefaults) -> [SavedBuybackScenario]? {
+        guard let data = userDefaults.data(forKey: storageKey),
+              let decoded = try? JSONDecoder().decode([SavedBuybackScenario].self, from: data)
+        else {
+            return nil
+        }
+
+        return decoded
+    }
+}
+
+struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -173,10 +217,9 @@ final class SavedScenarioStore: ObservableObject {
     @Published private(set) var scenarios: [SavedBuybackScenario] = []
 
     private let userDefaults: UserDefaults
-    private let storageKey = "buybackCalculator.savedScenarios"
     private let maximumScenarios = 20
 
-    init(userDefaults: UserDefaults = .standard) {
+    init(userDefaults: UserDefaults = BuybackSharedStorage.userDefaults) {
         self.userDefaults = userDefaults
         load()
     }
@@ -194,21 +237,10 @@ final class SavedScenarioStore: ObservableObject {
     }
 
     private func load() {
-        guard let data = userDefaults.data(forKey: storageKey),
-              let decoded = try? JSONDecoder().decode([SavedBuybackScenario].self, from: data)
-        else {
-            scenarios = []
-            return
-        }
-
-        scenarios = decoded.sorted { $0.savedAt > $1.savedAt }
+        scenarios = SavedScenarioStorage.load(userDefaults: userDefaults)
     }
 
     private func persist() {
-        guard let data = try? JSONEncoder().encode(scenarios) else {
-            return
-        }
-
-        userDefaults.set(data, forKey: storageKey)
+        SavedScenarioStorage.save(scenarios, userDefaults: userDefaults)
     }
 }
