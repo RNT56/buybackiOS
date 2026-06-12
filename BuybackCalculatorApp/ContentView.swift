@@ -37,7 +37,7 @@ struct ContentView: View {
     @State private var settingsPresented = false
     @State private var scenarioMessage: LookupMessage?
     @State private var startupScheduled = false
-    @FocusState private var focusedField: CalculatorField?
+    @State private var detailSectionsReady = false
 
     private var activeSymbol: String {
         lookup.selectedAsset?.symbol.nilIfBlank ?? symbolText.normalizedStockSymbol.nilIfBlank ?? assetQuery.normalizedStockSymbol
@@ -215,7 +215,7 @@ struct ContentView: View {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("Done") {
-                        focusedField = nil
+                        dismissKeyboard()
                     }
                 }
             }
@@ -304,9 +304,9 @@ struct ContentView: View {
                 }
                 inputPanel
 
-                if let calculation {
+                if detailSectionsReady, let calculation {
                     resultDetails(calculation)
-                } else {
+                } else if calculation == nil {
                     invalidState
                 }
 
@@ -331,7 +331,9 @@ struct ContentView: View {
         if let calculation {
             resultSummary(calculation)
             resultActionBar(calculation)
-            resultDetails(calculation)
+            if detailSectionsReady {
+                resultDetails(calculation)
+            }
         } else {
             invalidState
         }
@@ -391,11 +393,10 @@ struct ContentView: View {
                 TextField("AAPL, Apple, US0378331005", text: $assetQuery)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
-                    .focused($focusedField, equals: .asset)
                     .font(.title3.weight(.semibold))
                     .padding(.horizontal, 13)
                     .frame(height: 52)
-                    .liquidFieldSurface(isFocused: focusedField == .asset)
+                    .liquidFieldSurface()
             }
 
             if lookup.isSearching {
@@ -478,11 +479,10 @@ struct ContentView: View {
                         SecureField("Required for live search and quotes", text: $apiKeys.finnhubAPIKey)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                            .focused($focusedField, equals: .finnhubKey)
                             .font(.body.monospaced())
                             .padding(.horizontal, 13)
                             .frame(height: 50)
-                            .liquidFieldSurface(isFocused: focusedField == .finnhubKey)
+                            .liquidFieldSurface()
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -493,11 +493,10 @@ struct ContentView: View {
                         SecureField("Optional for higher identifier-map limits", text: $apiKeys.openFIGIAPIKey)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                            .focused($focusedField, equals: .openFIGIKey)
                             .font(.body.monospaced())
                             .padding(.horizontal, 13)
                             .frame(height: 50)
-                            .liquidFieldSurface(isFocused: focusedField == .openFIGIKey)
+                            .liquidFieldSurface()
                     }
 
                     HStack(spacing: 10) {
@@ -532,185 +531,209 @@ struct ContentView: View {
     }
 
     private var inputPanel: some View {
+        calculatorPanelContent
+            .liquidSurface()
+            .sheet(isPresented: $advancedExpanded) {
+                advancedCalculatorSheet
+            }
+    }
+
+    private var calculatorPanelContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             SectionTitle("Calculator", icon: .calculator)
 
-            VStack(alignment: .leading, spacing: 12) {
-                decimalField(
-                    "Current price",
-                    text: $sellPriceText,
-                    suffix: activeCurrencyCode,
-                    icon: lookup.quote == nil || manualPriceEnabled ? .edit : .live,
-                    field: .price,
-                    isDisabled: lookup.quote != nil && !manualPriceEnabled
-                )
+            calculatorCoreFields
 
-                decimalField(
-                    "Current gain",
-                    text: $gainPercentText,
-                    suffix: "%",
-                    icon: .percent,
-                    field: .gain,
-                    keyboardType: .numbersAndPunctuation,
-                    isDisabled: taxLotsEnabled
-                )
-            }
+            toggleButton("Manual price override", icon: .edit, isOn: $manualPriceEnabled)
 
-            Toggle(isOn: $manualPriceEnabled) {
-                IconLabel("Manual price override", icon: .edit, iconSize: 16)
-                    .font(.subheadline.weight(.semibold))
-            }
-
-            if lookup.isFetchingQuote {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text("Fetching latest price")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .liquidCapsuleSurface(tint: LiquidPalette.accent)
-            } else if let quote = lookup.quote {
-                QuoteStatusRow(quote: quote, manualPriceEnabled: manualPriceEnabled)
-            }
+            quoteStatus
 
             Button {
-                advancedExpanded.toggle()
+                advancedExpanded = true
             } label: {
-                expansionHeader("Advanced", icon: .sliders, isExpanded: advancedExpanded)
+                HStack(spacing: 10) {
+                    IconLabel("Advanced", icon: .sliders, iconSize: 17)
+                        .font(.headline)
+
+                    Spacer(minLength: 8)
+
+                    BuybackIcon(.chevron, tint: .secondary)
+                        .frame(width: 14, height: 14)
+                }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Advanced")
-            .accessibilityValue(advancedExpanded ? "Expanded" : "Collapsed")
+            .accessibilityValue("Opens advanced calculator settings")
+        }
+    }
 
-            if advancedExpanded {
+    private var calculatorCoreFields: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            decimalField(
+                "Current price",
+                text: $sellPriceText,
+                suffix: activeCurrencyCode,
+                icon: lookup.quote == nil || manualPriceEnabled ? .edit : .live,
+                field: .price,
+                isDisabled: lookup.quote != nil && !manualPriceEnabled
+            )
+
+            decimalField(
+                "Current gain",
+                text: $gainPercentText,
+                suffix: "%",
+                icon: .percent,
+                field: .gain,
+                keyboardType: .numbersAndPunctuation,
+                isDisabled: taxLotsEnabled
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var quoteStatus: some View {
+        if lookup.isFetchingQuote {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Fetching latest price")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .liquidCapsuleSurface(tint: LiquidPalette.accent)
+        } else if let quote = lookup.quote {
+            QuoteStatusRow(quote: quote, manualPriceEnabled: manualPriceEnabled)
+        }
+    }
+
+    private var advancedCalculatorSheet: some View {
+        NavigationStack {
+            ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    advancedGroup("Position", icon: .shares) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            decimalField("Shares", text: $sharesText, suffix: "sh", icon: .shares, field: .shares, isDisabled: taxLotsEnabled)
-                            decimalField(
-                                "Extra shares target",
-                                text: $targetExtraText,
-                                suffix: "%",
-                                icon: .target,
-                                field: .targetExtra
-                            )
-                        }
-
-                        Toggle(isOn: $taxLotsEnabled) {
-                            IconLabel("Use tax lots", icon: .lots, iconSize: 16)
-                                .font(.subheadline.weight(.semibold))
-                        }
-
-                        if taxLotsEnabled {
-                            VStack(alignment: .leading, spacing: 10) {
-                                taxLotRow(
-                                    title: "Lot 1",
-                                    shares: $lot1SharesText,
-                                    basis: $lot1BasisText,
-                                    sharesField: .lot1Shares,
-                                    basisField: .lot1Basis
-                                )
-                                taxLotRow(
-                                    title: "Lot 2",
-                                    shares: $lot2SharesText,
-                                    basis: $lot2BasisText,
-                                    sharesField: .lot2Shares,
-                                    basisField: .lot2Basis
-                                )
-                                taxLotRow(
-                                    title: "Lot 3",
-                                    shares: $lot3SharesText,
-                                    basis: $lot3BasisText,
-                                    sharesField: .lot3Shares,
-                                    basisField: .lot3Basis
-                                )
-
-                                if let lotSharesToSell, let lotAverageCostBasis {
-                                    StatusRow(message: .info("Selling \(lotSharesToSell.shareString) shares at weighted basis \(lotAverageCostBasis.moneyString(currencyCode: activeCurrencyCode))."))
-                                }
-                            }
-                        }
-                    }
-
-                    advancedGroup("Tax", icon: .tax) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            IconLabel("Tax profile", icon: .taxProfile, tint: .secondary, iconSize: 14)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-
-                            Picker("Tax profile", selection: $taxProfileRaw) {
-                                ForEach(TaxProfile.allCases) { profile in
-                                    Text(profile.label).tag(profile.rawValue)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                        }
-
-                        VStack(alignment: .leading, spacing: 12) {
-                            decimalField("Tax rate", text: $taxRateText, suffix: "%", icon: .taxRate, field: .taxRate, isDisabled: taxProfile != .custom)
-
-                            textField(
-                                "Tax currency",
-                                text: $taxCurrencyText,
-                                suffix: "ccy",
-                                icon: .taxCurrency,
-                                field: .taxCurrency
-                            )
-
-                            decimalField(
-                                "FX to tax currency",
-                                text: $fxRateText,
-                                suffix: "x",
-                                icon: .fx,
-                                field: .fxRate
-                            )
-                        }
-                    }
-
-                    advancedGroup("Costs", icon: .costs) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            decimalField(
-                                "Slippage buffer",
-                                text: $slippageText,
-                                suffix: "%",
-                                icon: .slippage,
-                                field: .slippage
-                            )
-
-                            decimalField(
-                                "Sell fees",
-                                text: $sellFeeText,
-                                suffix: activeCurrencyCode,
-                                icon: .sellFee,
-                                field: .sellFee
-                            )
-
-                            decimalField(
-                                "Buy fees",
-                                text: $buyFeeText,
-                                suffix: activeCurrencyCode,
-                                icon: .buyFee,
-                                field: .buyFee
-                            )
-                        }
-                    }
-
-                    Button {
-                        refreshSelectedQuote()
-                    } label: {
-                        LiquidGlassActionIcon(icon: .refresh, size: 44)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
-                    .accessibilityLabel("Refresh selected price")
+                    advancedPositionContent
+                    advancedTaxContent
+                    advancedCostsContent
+                    advancedRefreshButton
                 }
-                .padding(.top, 12)
+                .frame(maxWidth: 760, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+            }
+            .background {
+                LiquidGlassBackground()
+                    .ignoresSafeArea()
+            }
+            .navigationTitle("Advanced")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        advancedExpanded = false
+                    }
+                }
+            }
+        }
+        .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+    }
+
+    private var advancedPositionContent: some View {
+        advancedGroup("Position", icon: .shares) {
+            VStack(alignment: .leading, spacing: 12) {
+                decimalField("Shares", text: $sharesText, suffix: "sh", icon: .shares, field: .shares, isDisabled: taxLotsEnabled)
+                decimalField("Extra shares target", text: $targetExtraText, suffix: "%", icon: .target, field: .targetExtra)
+                toggleButton("Use tax lots", icon: .lots, isOn: $taxLotsEnabled)
+
+                if taxLotsEnabled {
+                    taxLotContent
+                }
             }
         }
         .liquidSurface()
+    }
+
+    private var taxLotContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            taxLotRow(title: "Lot 1", shares: $lot1SharesText, basis: $lot1BasisText, sharesField: .lot1Shares, basisField: .lot1Basis)
+            taxLotRow(title: "Lot 2", shares: $lot2SharesText, basis: $lot2BasisText, sharesField: .lot2Shares, basisField: .lot2Basis)
+            taxLotRow(title: "Lot 3", shares: $lot3SharesText, basis: $lot3BasisText, sharesField: .lot3Shares, basisField: .lot3Basis)
+
+            if let lotSharesToSell, let lotAverageCostBasis {
+                StatusRow(message: .info("Selling \(lotSharesToSell.shareString) shares at weighted basis \(lotAverageCostBasis.moneyString(currencyCode: activeCurrencyCode))."))
+            }
+        }
+    }
+
+    private var advancedTaxContent: some View {
+        advancedGroup("Tax", icon: .tax) {
+            VStack(alignment: .leading, spacing: 8) {
+                IconLabel("Tax profile", icon: .taxProfile, tint: .secondary, iconSize: 14)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Picker("Tax profile", selection: $taxProfileRaw) {
+                    ForEach(TaxProfile.allCases) { profile in
+                        Text(profile.label).tag(profile.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                decimalField("Tax rate", text: $taxRateText, suffix: "%", icon: .taxRate, field: .taxRate, isDisabled: taxProfile != .custom)
+                textField("Tax currency", text: $taxCurrencyText, suffix: "ccy", icon: .taxCurrency, field: .taxCurrency)
+                decimalField("FX to tax currency", text: $fxRateText, suffix: "x", icon: .fx, field: .fxRate)
+            }
+        }
+        .liquidSurface()
+    }
+
+    private var advancedCostsContent: some View {
+        advancedGroup("Costs", icon: .costs) {
+            VStack(alignment: .leading, spacing: 12) {
+                decimalField("Slippage buffer", text: $slippageText, suffix: "%", icon: .slippage, field: .slippage)
+                decimalField("Sell fees", text: $sellFeeText, suffix: activeCurrencyCode, icon: .sellFee, field: .sellFee)
+                decimalField("Buy fees", text: $buyFeeText, suffix: activeCurrencyCode, icon: .buyFee, field: .buyFee)
+            }
+        }
+        .liquidSurface()
+    }
+
+    private var advancedRefreshButton: some View {
+        Button {
+            refreshSelectedQuote()
+        } label: {
+            LiquidGlassActionIcon(icon: .refresh, size: 44)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
+        .accessibilityLabel("Refresh selected price")
+        .liquidSurface()
+    }
+
+    private func toggleButton(_ title: String, icon: BuybackIconKind, isOn: Binding<Bool>) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: 10) {
+                IconLabel(title, icon: icon, iconSize: 16)
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer(minLength: 8)
+
+                LiquidGlassIcon(
+                    icon: isOn.wrappedValue ? .selected : .clear,
+                    tint: isOn.wrappedValue ? LiquidPalette.accent : .secondary,
+                    size: 30
+                )
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(isOn.wrappedValue ? "On" : "Off")
     }
 
     private func expansionHeader(_ title: String, icon: BuybackIconKind, isExpanded: Bool) -> some View {
@@ -768,7 +791,6 @@ struct ContentView: View {
                     .keyboardType(keyboardType)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .focused($focusedField, equals: field)
                     .font(.title3.weight(.semibold).monospacedDigit())
                     .lineLimit(1)
                     .disabled(isDisabled)
@@ -781,7 +803,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 13)
             .frame(height: 52)
-            .liquidFieldSurface(isFocused: focusedField == field, isDisabled: isDisabled)
+            .liquidFieldSurface(isDisabled: isDisabled)
         }
     }
 
@@ -804,7 +826,6 @@ struct ContentView: View {
                 TextField(title, text: text)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
-                    .focused($focusedField, equals: field)
                     .font(.title3.weight(.semibold).monospaced())
                     .lineLimit(1)
                     .disabled(isDisabled)
@@ -817,7 +838,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 13)
             .frame(height: 52)
-            .liquidFieldSurface(isFocused: focusedField == field, isDisabled: isDisabled)
+            .liquidFieldSurface(isDisabled: isDisabled)
         }
     }
 
@@ -1315,7 +1336,6 @@ struct ContentView: View {
         assetQuery = asset.symbol
         symbolText = asset.symbol
         persist(asset)
-        focusedField = nil
 
         Task {
             if let quote = await lookup.fetchQuote(for: asset) {
@@ -1379,6 +1399,7 @@ struct ContentView: View {
 
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 120_000_000)
+            detailSectionsReady = true
             await apiKeys.loadAsync()
             configureLookupClient()
             apiKeysExpanded = !apiKeys.hasUsableFinnhubAPIKey
@@ -1431,7 +1452,6 @@ struct ContentView: View {
         taxLotsEnabled = scenario.taxLotsEnabled
         applyTaxLots(scenario.taxLots)
         manualPriceEnabled = scenario.manualPriceEnabled
-        focusedField = nil
 
         if let asset = scenario.selectedAsset {
             lookup.prepareSelection(asset)
@@ -1507,7 +1527,6 @@ struct ContentView: View {
         }
 
         scenarioMessage = .info("Loaded widget values.")
-        focusedField = .gain
     }
 
     private func taxLot(sharesText: String, basisText: String) -> TaxLot? {
@@ -1542,6 +1561,10 @@ struct ContentView: View {
 
     private func parsedText(_ text: String) -> String {
         BuybackCalculator.parseDecimal(text)?.inputString ?? text
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
 
