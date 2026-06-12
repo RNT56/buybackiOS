@@ -83,12 +83,12 @@ enum WidgetPriceStatus: Equatable, Sendable {
         }
     }
 
-    var systemImage: String {
+    var icon: BuybackIconKind {
         switch self {
         case .live:
-            return "bolt.circle.fill"
+            return .live
         case .fallback:
-            return "exclamationmark.triangle.fill"
+            return .warning
         }
     }
 }
@@ -351,9 +351,9 @@ struct BuybackWidgetEntryView: View {
             }
 
             VStack(spacing: 8) {
-                MetricTile(title: "Price", value: calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode), systemImage: "tag.fill", tint: .blue)
-                MetricTile(title: "Gain", value: calculation.gainAtSellPercent.compactPercentString, systemImage: "percent", tint: .indigo)
-                MetricTile(title: entry.priceStatus.label, value: statusValue, systemImage: entry.priceStatus.systemImage, tint: statusTint)
+                MetricTile(title: "Price", value: calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode), icon: .price, tint: .blue)
+                MetricTile(title: "Gain", value: calculation.gainAtSellPercent.compactPercentString, icon: .percent, tint: .indigo)
+                MetricTile(title: entry.priceStatus.label, value: statusValue, icon: entry.priceStatus.icon, tint: statusTint)
             }
             .frame(width: 114)
         }
@@ -381,18 +381,18 @@ struct BuybackWidgetEntryView: View {
 
             Grid(alignment: .leading, horizontalSpacing: 9, verticalSpacing: 9) {
                 GridRow {
-                    MetricTile(title: "Price", value: calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode), systemImage: "tag.fill", tint: .blue)
-                    MetricTile(title: "Gain", value: calculation.gainAtSellPercent.compactPercentString, systemImage: "percent", tint: .indigo)
+                    MetricTile(title: "Price", value: calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode), icon: .price, tint: .blue)
+                    MetricTile(title: "Gain", value: calculation.gainAtSellPercent.compactPercentString, icon: .percent, tint: .indigo)
                 }
 
                 GridRow {
-                    MetricTile(title: "Basis", value: calculation.averageCostBasis.moneyString(currencyCode: calculation.currencyCode), systemImage: "banknote.fill", tint: .green)
-                    MetricTile(title: "Drop", value: calculation.requiredDropPercent.compactPercentString, systemImage: "arrow.down.right.circle.fill", tint: .orange)
+                    MetricTile(title: "Basis", value: calculation.averageCostBasis.moneyString(currencyCode: calculation.currencyCode), icon: .basis, tint: .green)
+                    MetricTile(title: "Drop", value: calculation.requiredDropPercent.compactPercentString, icon: .drop, tint: .orange)
                 }
 
                 GridRow {
-                    MetricTile(title: "Tax", value: calculation.taxAmount.moneyString(currencyCode: calculation.currencyCode), systemImage: "building.columns.fill", tint: .mint)
-                    MetricTile(title: entry.priceStatus.label, value: statusValue, systemImage: entry.priceStatus.systemImage, tint: statusTint)
+                    MetricTile(title: "Tax", value: calculation.taxAmount.moneyString(currencyCode: calculation.currencyCode), icon: .tax, tint: .mint)
+                    MetricTile(title: entry.priceStatus.label, value: statusValue, icon: entry.priceStatus.icon, tint: statusTint)
                 }
             }
         }
@@ -418,10 +418,8 @@ struct BuybackWidgetEntryView: View {
 
     private var invalidView: some View {
         VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(family == .systemSmall ? .title3 : .title2)
-                .foregroundStyle(.orange)
-                .symbolRenderingMode(.hierarchical)
+            BuybackIcon(.warning, tint: .orange)
+                .frame(width: family == .systemSmall ? 24 : 30, height: family == .systemSmall ? 24 : 30)
                 .widgetAccentable()
 
             Text("Check widget inputs")
@@ -444,10 +442,7 @@ private struct WidgetHeader: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            Image(systemName: entry.priceStatus.systemImage)
-                .font(compact ? .caption.weight(.bold) : .subheadline.weight(.bold))
-                .foregroundStyle(statusTint)
-                .symbolRenderingMode(.hierarchical)
+            BuybackIcon(entry.priceStatus.icon, tint: statusTint)
                 .widgetAccentable()
                 .frame(width: compact ? 24 : 30, height: compact ? 24 : 30)
                 .background {
@@ -516,7 +511,7 @@ private struct MetricTile: View {
 
     let title: String
     let value: String
-    let systemImage: String
+    let icon: BuybackIconKind
     let tint: Color
 
     private var resolvedTint: Color {
@@ -525,10 +520,8 @@ private struct MetricTile: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
-            Image(systemName: systemImage)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(resolvedTint)
-                .symbolRenderingMode(.hierarchical)
+            BuybackIcon(icon, tint: resolvedTint)
+                .frame(width: 15, height: 15)
                 .widgetAccentable()
 
             VStack(alignment: .leading, spacing: 1) {

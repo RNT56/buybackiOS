@@ -97,16 +97,16 @@ private struct MarketGridOverlay: View {
 
 struct SectionTitle: View {
     let title: String
-    let systemImage: String
+    let icon: BuybackIconKind
 
-    init(_ title: String, systemImage: String) {
+    init(_ title: String, icon: BuybackIconKind) {
         self.title = title
-        self.systemImage = systemImage
+        self.icon = icon
     }
 
     var body: some View {
         HStack(spacing: 9) {
-            LiquidGlassIcon(systemImage: systemImage, tint: LiquidPalette.accent, size: 30)
+            LiquidGlassIcon(icon: icon, tint: LiquidPalette.accent, size: 30)
 
             Text(title)
                 .font(.headline)
@@ -118,17 +118,15 @@ struct SectionTitle: View {
 struct LiquidGlassIcon: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
-    let systemImage: String
+    let icon: BuybackIconKind
     let tint: Color
     let size: CGFloat
 
     var body: some View {
         let shape = Circle()
 
-        Image(systemName: systemImage)
-            .font(.system(size: size * 0.42, weight: .semibold))
-            .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(tint)
+        BuybackIcon(icon, tint: tint)
+            .padding(size * 0.24)
             .frame(width: size, height: size)
             .background {
                 if reduceTransparency {
@@ -176,11 +174,11 @@ struct GlassBadge: View {
 struct MetricTile: View {
     let title: String
     let value: String
-    let systemImage: String
+    let icon: BuybackIconKind
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            LiquidGlassIcon(systemImage: systemImage, tint: LiquidPalette.accent, size: 34)
+            LiquidGlassIcon(icon: icon, tint: LiquidPalette.accent, size: 34)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)

@@ -15,6 +15,7 @@
 		524F16A4D3C227E234E190B0 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFABE4509A82FB113137375D /* Security.framework */; };
 		542490B7D82C13FD76255F2A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7B5A18387FBCDCE5D53C80DA /* Assets.xcassets */; };
 		5599C4B7A9307A1F6D0F8DF2 /* APIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */; };
+		55DAF44977E6329DB96E9E9C /* BuybackIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB486946B7711FABD5279F8D /* BuybackIcons.swift */; };
 		5A390E8B67991CD5698F05D8 /* LiquidDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189BA55F9DAF4FC8AD7562F9 /* LiquidDesignSystem.swift */; };
 		5AACF05A06300C00A45E5E28 /* PriceAlertStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 701524F1034E4196D6D88E62 /* PriceAlertStore.swift */; };
 		6544D8267A015C0494F21F2D /* BuybackWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB028776A73BE604AEAAC97D /* BuybackWidgetBundle.swift */; };
@@ -28,6 +29,7 @@
 		A485769F798E7E5921624D23 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 018DC9398D8BC71964C4E26F /* WidgetKit.framework */; };
 		A531D215B745200951AE3E39 /* APIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */; };
 		BF2DEDB6FC4A147CF4C7E56D /* BuybackCalculationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BBAC552BCC1BEBE64ECE84 /* BuybackCalculationTests.swift */; };
+		C072F65DB9B4A68359591F4A /* BuybackIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB486946B7711FABD5279F8D /* BuybackIcons.swift */; };
 		CDFA8BD27BB5E2CD6E69A0EB /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0977B432A10A098ADAE37C /* XCTest.framework */; };
 		CFC04F61CC36C451FF237949 /* BuybackCalculatorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D69F740B5DAE7D338D5F43ED /* BuybackCalculatorApp.swift */; };
 		D2E6D365418EAF098E7A1D8F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFABE4509A82FB113137375D /* Security.framework */; };
@@ -35,6 +37,7 @@
 		D6ACAC800AC6B87321695503 /* APIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */; };
 		D9B15564FAD34DCCE402C7FC /* BuybackWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C9A76E0F6F0282BB7918DABD /* BuybackWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DAE5A6CFA8552024FF0F219A /* BuybackCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */; };
+		DCCC9663B3E35A5EA0BAD279 /* BuybackIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB486946B7711FABD5279F8D /* BuybackIcons.swift */; };
 		E8903FCD09A680C72C15796D /* MarketData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E643154B019D90FC0941E9C1 /* MarketData.swift */; };
 		FFCE25C9274736BB75B946AC /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFABE4509A82FB113137375D /* Security.framework */; };
 /* End PBXBuildFile section */
@@ -89,6 +92,7 @@
 		CB028776A73BE604AEAAC97D /* BuybackWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackWidgetBundle.swift; sourceTree = "<group>"; };
 		D69F740B5DAE7D338D5F43ED /* BuybackCalculatorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackCalculatorApp.swift; sourceTree = "<group>"; };
 		E643154B019D90FC0941E9C1 /* MarketData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketData.swift; sourceTree = "<group>"; };
+		EB486946B7711FABD5279F8D /* BuybackIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackIcons.swift; sourceTree = "<group>"; };
 		EE29427837444F02BDFC7FFA /* APIKeySettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeySettingsViewModel.swift; sourceTree = "<group>"; };
 		F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackCalculator.swift; sourceTree = "<group>"; };
 		FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyStore.swift; sourceTree = "<group>"; };
@@ -187,6 +191,7 @@
 			children = (
 				FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */,
 				F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */,
+				EB486946B7711FABD5279F8D /* BuybackIcons.swift */,
 				E643154B019D90FC0941E9C1 /* MarketData.swift */,
 			);
 			path = Shared;
@@ -331,6 +336,7 @@
 				5599C4B7A9307A1F6D0F8DF2 /* APIKeyStore.swift in Sources */,
 				4B7F0D6ACA90354527CFC923 /* BuybackCalculator.swift in Sources */,
 				CFC04F61CC36C451FF237949 /* BuybackCalculatorApp.swift in Sources */,
+				DCCC9663B3E35A5EA0BAD279 /* BuybackIcons.swift in Sources */,
 				848D1E54C82A645B489A2116 /* ContentView.swift in Sources */,
 				5A390E8B67991CD5698F05D8 /* LiquidDesignSystem.swift in Sources */,
 				4FAFA4E7CD8A75579BFCC719 /* MarketData.swift in Sources */,
@@ -347,6 +353,7 @@
 				A531D215B745200951AE3E39 /* APIKeyStore.swift in Sources */,
 				BF2DEDB6FC4A147CF4C7E56D /* BuybackCalculationTests.swift in Sources */,
 				9E29383603E54BF2D3E55179 /* BuybackCalculator.swift in Sources */,
+				C072F65DB9B4A68359591F4A /* BuybackIcons.swift in Sources */,
 				E8903FCD09A680C72C15796D /* MarketData.swift in Sources */,
 				9C43BB2052E8F8063FC23868 /* MarketDataDecodingTests.swift in Sources */,
 			);
@@ -358,6 +365,7 @@
 			files = (
 				D6ACAC800AC6B87321695503 /* APIKeyStore.swift in Sources */,
 				DAE5A6CFA8552024FF0F219A /* BuybackCalculator.swift in Sources */,
+				55DAF44977E6329DB96E9E9C /* BuybackIcons.swift in Sources */,
 				84C61354184B6590A0069E04 /* BuybackWidget.swift in Sources */,
 				6544D8267A015C0494F21F2D /* BuybackWidgetBundle.swift in Sources */,
 				8FBBB367F886BF37CF65921D /* MarketData.swift in Sources */,

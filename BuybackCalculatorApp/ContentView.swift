@@ -195,7 +195,7 @@ struct ContentView: View {
                     Button {
                         settingsPresented = true
                     } label: {
-                        Label("Settings", systemImage: "gearshape")
+                        IconLabel("Settings", icon: .settings)
                     }
                     .buttonStyle(.glass)
                 }
@@ -204,7 +204,7 @@ struct ContentView: View {
                     Button {
                         refreshSelectedQuote()
                     } label: {
-                        Label("Refresh Price", systemImage: "arrow.clockwise")
+                        IconLabel("Refresh Price", icon: .refresh)
                     }
                     .buttonStyle(.glass)
                     .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
@@ -292,8 +292,25 @@ struct ContentView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 18) {
-                primaryInputColumn
-                resultColumn
+                header
+
+                if let calculation {
+                    resultSummary(calculation)
+                    resultActionBar(calculation)
+                }
+
+                lookupPanel
+                if !apiKeys.hasUsableFinnhubAPIKey {
+                    apiKeyPrompt
+                }
+                inputPanel
+
+                if let calculation {
+                    resultDetails(calculation)
+                } else {
+                    invalidState
+                }
+
                 widgetStatus
             }
         }
@@ -314,19 +331,25 @@ struct ContentView: View {
     private var resultColumn: some View {
         if let calculation {
             resultSummary(calculation)
-            positionBreakdown(calculation)
-            alertSection(calculation)
-            sensitivitySection(calculation)
-            scenarioSection(calculation)
+            resultActionBar(calculation)
+            resultDetails(calculation)
         } else {
             invalidState
         }
     }
 
+    @ViewBuilder
+    private func resultDetails(_ calculation: BuybackCalculation) -> some View {
+            positionBreakdown(calculation)
+            sensitivitySection(calculation)
+            alertSection(calculation)
+            scenarioSection(calculation)
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
-                LiquidGlassIcon(systemImage: "arrow.triangle.2.circlepath", tint: .teal, size: 46)
+                LiquidGlassIcon(icon: .appMark, tint: .teal, size: 46)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayName)
@@ -356,10 +379,10 @@ struct ContentView: View {
 
     private var lookupPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle("Asset", systemImage: "magnifyingglass")
+            SectionTitle("Asset", icon: .asset)
 
             VStack(alignment: .leading, spacing: 8) {
-                Label("Name, ticker, ISIN, or WKN", systemImage: "textformat.characters")
+                IconLabel("Name, ticker, ISIN, or WKN", icon: .lookupText, tint: .secondary, iconSize: 14)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
@@ -407,7 +430,7 @@ struct ContentView: View {
 
     private var apiKeyPrompt: some View {
         HStack(spacing: 12) {
-            LiquidGlassIcon(systemImage: "key", tint: .orange, size: 38)
+            LiquidGlassIcon(icon: .key, tint: .orange, size: 38)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Live prices are off")
@@ -424,7 +447,8 @@ struct ContentView: View {
                 apiKeysExpanded = true
                 settingsPresented = true
             } label: {
-                Image(systemName: "gearshape")
+                BuybackIcon(.settings)
+                    .frame(width: 18, height: 18)
             }
             .buttonStyle(.glass)
             .accessibilityLabel("Open API key settings")
@@ -436,7 +460,7 @@ struct ContentView: View {
         DisclosureGroup(isExpanded: $apiKeysExpanded) {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("Finnhub", systemImage: "bolt.horizontal.circle")
+                    IconLabel("Finnhub", icon: .live, tint: .secondary, iconSize: 14)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
@@ -451,7 +475,7 @@ struct ContentView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("OpenFIGI", systemImage: "key.horizontal")
+                    IconLabel("OpenFIGI", icon: .apiKey, tint: .secondary, iconSize: 14)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
@@ -471,7 +495,7 @@ struct ContentView: View {
                         configureLookupClient()
                         lookup.scheduleSearch(query: assetQuery)
                     } label: {
-                        Label("Save", systemImage: "checkmark.circle.fill")
+                        IconLabel("Save", icon: .save)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glass)
@@ -481,7 +505,7 @@ struct ContentView: View {
                         configureLookupClient()
                         lookup.scheduleSearch(query: assetQuery)
                     } label: {
-                        Label("Clear", systemImage: "trash")
+                        IconLabel("Clear", icon: .clear)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glass)
@@ -491,14 +515,14 @@ struct ContentView: View {
             }
             .padding(.top, 12)
         } label: {
-            SectionTitle("API Keys", systemImage: apiKeys.hasUsableFinnhubAPIKey ? "key.fill" : "key")
+            SectionTitle("API Keys", icon: apiKeys.hasUsableFinnhubAPIKey ? .apiKey : .key)
         }
         .liquidSurface()
     }
 
     private var inputPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionTitle("Calculator", systemImage: "number")
+            SectionTitle("Calculator", icon: .calculator)
 
             LazyVGrid(
                 columns: [
@@ -511,7 +535,7 @@ struct ContentView: View {
                     "Current price",
                     text: $sellPriceText,
                     suffix: activeCurrencyCode,
-                    icon: lookup.quote == nil || manualPriceEnabled ? "pencil" : "bolt.fill",
+                    icon: lookup.quote == nil || manualPriceEnabled ? .edit : .live,
                     field: .price,
                     isDisabled: lookup.quote != nil && !manualPriceEnabled
                 )
@@ -520,11 +544,16 @@ struct ContentView: View {
                     "Current gain",
                     text: $gainPercentText,
                     suffix: "%",
-                    icon: "percent",
+                    icon: .percent,
                     field: .gain,
                     keyboardType: .numbersAndPunctuation,
                     isDisabled: taxLotsEnabled
                 )
+            }
+
+            Toggle(isOn: $manualPriceEnabled) {
+                IconLabel("Manual price override", icon: .edit, iconSize: 16)
+                    .font(.subheadline.weight(.semibold))
             }
 
             if lookup.isFetchingQuote {
@@ -542,123 +571,140 @@ struct ContentView: View {
             }
 
             DisclosureGroup(isExpanded: $advancedExpanded) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Toggle(isOn: $manualPriceEnabled) {
-                        Label("Manual price override", systemImage: "pencil.and.list.clipboard")
-                            .font(.subheadline.weight(.semibold))
-                    }
+                VStack(alignment: .leading, spacing: 18) {
+                    advancedGroup("Position", icon: .shares) {
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.flexible(), spacing: 12),
+                                GridItem(.flexible(), spacing: 12)
+                            ],
+                            spacing: 12
+                        ) {
+                            decimalField("Shares", text: $sharesText, suffix: "sh", icon: .shares, field: .shares, isDisabled: taxLotsEnabled)
+                            decimalField(
+                                "Extra shares target",
+                                text: $targetExtraText,
+                                suffix: "%",
+                                icon: .target,
+                                field: .targetExtra
+                            )
+                        }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Tax profile", systemImage: "person.text.rectangle")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                        Toggle(isOn: $taxLotsEnabled) {
+                            IconLabel("Use tax lots", icon: .lots, iconSize: 16)
+                                .font(.subheadline.weight(.semibold))
+                        }
 
-                        Picker("Tax profile", selection: $taxProfileRaw) {
-                            ForEach(TaxProfile.allCases) { profile in
-                                Text(profile.label).tag(profile.rawValue)
+                        if taxLotsEnabled {
+                            VStack(alignment: .leading, spacing: 10) {
+                                taxLotRow(
+                                    title: "Lot 1",
+                                    shares: $lot1SharesText,
+                                    basis: $lot1BasisText,
+                                    sharesField: .lot1Shares,
+                                    basisField: .lot1Basis
+                                )
+                                taxLotRow(
+                                    title: "Lot 2",
+                                    shares: $lot2SharesText,
+                                    basis: $lot2BasisText,
+                                    sharesField: .lot2Shares,
+                                    basisField: .lot2Basis
+                                )
+                                taxLotRow(
+                                    title: "Lot 3",
+                                    shares: $lot3SharesText,
+                                    basis: $lot3BasisText,
+                                    sharesField: .lot3Shares,
+                                    basisField: .lot3Basis
+                                )
+
+                                if let lotSharesToSell, let lotAverageCostBasis {
+                                    StatusRow(message: .info("Selling \(lotSharesToSell.shareString) shares at weighted basis \(lotAverageCostBasis.moneyString(currencyCode: activeCurrencyCode))."))
+                                }
                             }
                         }
-                        .pickerStyle(.segmented)
                     }
 
-                    LazyVGrid(
-                        columns: [
-                            GridItem(.flexible(), spacing: 12),
-                            GridItem(.flexible(), spacing: 12)
-                        ],
-                        spacing: 12
-                    ) {
-                        decimalField("Shares", text: $sharesText, suffix: "sh", icon: "number", field: .shares, isDisabled: taxLotsEnabled)
-                        decimalField("Tax rate", text: $taxRateText, suffix: "%", icon: "building.columns", field: .taxRate, isDisabled: taxProfile != .custom)
+                    advancedGroup("Tax", icon: .tax) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            IconLabel("Tax profile", icon: .taxProfile, tint: .secondary, iconSize: 14)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
 
-                        textField(
-                            "Tax currency",
-                            text: $taxCurrencyText,
-                            suffix: "ccy",
-                            icon: "coloncurrencysign.circle",
-                            field: .taxCurrency
-                        )
-
-                        decimalField(
-                            "FX to tax currency",
-                            text: $fxRateText,
-                            suffix: "x",
-                            icon: "arrow.left.arrow.right",
-                            field: .fxRate
-                        )
-
-                        decimalField(
-                            "Extra shares target",
-                            text: $targetExtraText,
-                            suffix: "%",
-                            icon: "arrow.up.forward.circle",
-                            field: .targetExtra
-                        )
-
-                        decimalField(
-                            "Slippage buffer",
-                            text: $slippageText,
-                            suffix: "%",
-                            icon: "waveform.path.ecg",
-                            field: .slippage
-                        )
-
-                        decimalField(
-                            "Sell fees",
-                            text: $sellFeeText,
-                            suffix: activeCurrencyCode,
-                            icon: "minus.circle",
-                            field: .sellFee
-                        )
-
-                        decimalField(
-                            "Buy fees",
-                            text: $buyFeeText,
-                            suffix: activeCurrencyCode,
-                            icon: "plus.circle",
-                            field: .buyFee
-                        )
-                    }
-
-                    Toggle(isOn: $taxLotsEnabled) {
-                        Label("Use tax lots", systemImage: "tablecells")
-                            .font(.subheadline.weight(.semibold))
-                    }
-
-                    if taxLotsEnabled {
-                        VStack(alignment: .leading, spacing: 10) {
-                            taxLotRow(
-                                title: "Lot 1",
-                                shares: $lot1SharesText,
-                                basis: $lot1BasisText,
-                                sharesField: .lot1Shares,
-                                basisField: .lot1Basis
-                            )
-                            taxLotRow(
-                                title: "Lot 2",
-                                shares: $lot2SharesText,
-                                basis: $lot2BasisText,
-                                sharesField: .lot2Shares,
-                                basisField: .lot2Basis
-                            )
-                            taxLotRow(
-                                title: "Lot 3",
-                                shares: $lot3SharesText,
-                                basis: $lot3BasisText,
-                                sharesField: .lot3Shares,
-                                basisField: .lot3Basis
-                            )
-
-                            if let lotSharesToSell, let lotAverageCostBasis {
-                                StatusRow(message: .info("Selling \(lotSharesToSell.shareString) shares at weighted basis \(lotAverageCostBasis.moneyString(currencyCode: activeCurrencyCode))."))
+                            Picker("Tax profile", selection: $taxProfileRaw) {
+                                ForEach(TaxProfile.allCases) { profile in
+                                    Text(profile.label).tag(profile.rawValue)
+                                }
                             }
+                            .pickerStyle(.segmented)
+                        }
+
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.flexible(), spacing: 12),
+                                GridItem(.flexible(), spacing: 12)
+                            ],
+                            spacing: 12
+                        ) {
+                            decimalField("Tax rate", text: $taxRateText, suffix: "%", icon: .taxRate, field: .taxRate, isDisabled: taxProfile != .custom)
+
+                            textField(
+                                "Tax currency",
+                                text: $taxCurrencyText,
+                                suffix: "ccy",
+                                icon: .taxCurrency,
+                                field: .taxCurrency
+                            )
+
+                            decimalField(
+                                "FX to tax currency",
+                                text: $fxRateText,
+                                suffix: "x",
+                                icon: .fx,
+                                field: .fxRate
+                            )
+                        }
+                    }
+
+                    advancedGroup("Costs", icon: .costs) {
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.flexible(), spacing: 12),
+                                GridItem(.flexible(), spacing: 12)
+                            ],
+                            spacing: 12
+                        ) {
+                            decimalField(
+                                "Slippage buffer",
+                                text: $slippageText,
+                                suffix: "%",
+                                icon: .slippage,
+                                field: .slippage
+                            )
+
+                            decimalField(
+                                "Sell fees",
+                                text: $sellFeeText,
+                                suffix: activeCurrencyCode,
+                                icon: .sellFee,
+                                field: .sellFee
+                            )
+
+                            decimalField(
+                                "Buy fees",
+                                text: $buyFeeText,
+                                suffix: activeCurrencyCode,
+                                icon: .buyFee,
+                                field: .buyFee
+                            )
                         }
                     }
 
                     Button {
                         refreshSelectedQuote()
                     } label: {
-                        Label("Refresh selected price", systemImage: "arrow.clockwise")
+                        IconLabel("Refresh selected price", icon: .refresh)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glass)
@@ -666,24 +712,44 @@ struct ContentView: View {
                 }
                 .padding(.top, 12)
             } label: {
-                Label("Advanced", systemImage: "slider.horizontal.3")
+                IconLabel("Advanced", icon: .sliders, iconSize: 17)
                     .font(.headline)
             }
         }
         .liquidSurface()
     }
 
+    private func advancedGroup<Content: View>(
+        _ title: String,
+        icon: BuybackIconKind,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 7) {
+                BuybackIcon(icon, tint: LiquidPalette.accent)
+                    .frame(width: 17, height: 17)
+
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+            }
+
+            content()
+        }
+    }
+
     private func decimalField(
         _ title: String,
         text: Binding<String>,
         suffix: String,
-        icon: String,
+        icon: BuybackIconKind,
         field: CalculatorField,
         keyboardType: UIKeyboardType = .decimalPad,
         isDisabled: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Label(title, systemImage: icon)
+            IconLabel(title, icon: icon, tint: .secondary, iconSize: 14)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -715,12 +781,12 @@ struct ContentView: View {
         _ title: String,
         text: Binding<String>,
         suffix: String,
-        icon: String,
+        icon: BuybackIconKind,
         field: CalculatorField,
         isDisabled: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Label(title, systemImage: icon)
+            IconLabel(title, icon: icon, tint: .secondary, iconSize: 14)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -767,8 +833,8 @@ struct ContentView: View {
                 ],
                 spacing: 12
             ) {
-                decimalField("Shares", text: shares, suffix: "sh", icon: "number", field: sharesField)
-                decimalField("Basis", text: basis, suffix: activeCurrencyCode, icon: "banknote", field: basisField)
+                decimalField("Shares", text: shares, suffix: "sh", icon: .shares, field: sharesField)
+                decimalField("Basis", text: basis, suffix: activeCurrencyCode, icon: .basis, field: basisField)
             }
         }
         .padding(.horizontal, 11)
@@ -779,7 +845,7 @@ struct ContentView: View {
     private func resultSummary(_ calculation: BuybackCalculation) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .center) {
-                SectionTitle("Buy-back limit", systemImage: "scope")
+                SectionTitle("Buy-back limit", icon: .limit)
                 Spacer(minLength: 8)
                 Text(lookup.quote == nil || manualPriceEnabled ? "Manual" : "Auto")
                     .font(.caption.weight(.bold))
@@ -807,36 +873,142 @@ struct ContentView: View {
         .liquidSurface(prominent: true)
     }
 
+    private func resultActionBar(_ calculation: BuybackCalculation) -> some View {
+        HStack(spacing: 14) {
+            Spacer(minLength: 0)
+
+            iconActionButton(
+                icon: .refresh,
+                tint: LiquidPalette.blue,
+                accessibilityLabel: "Refresh selected price",
+                isDisabled: lookup.selectedAsset == nil || lookup.isFetchingQuote
+            ) {
+                refreshSelectedQuote()
+            }
+
+            iconActionButton(
+                icon: .alertArmed,
+                tint: .orange,
+                accessibilityLabel: "Arm alert at buy-back limit"
+            ) {
+                alertPriceText = calculation.maximumBuybackPrice.inputString
+                alerts.save(
+                    symbol: calculation.symbol,
+                    targetPrice: calculation.maximumBuybackPrice,
+                    currencyCode: calculation.currencyCode
+                )
+                evaluateAlert(calculation)
+            }
+
+            iconActionButton(
+                icon: .save,
+                tint: LiquidPalette.accent,
+                accessibilityLabel: "Save current scenario"
+            ) {
+                saveScenario(calculation)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.horizontal, 4)
+    }
+
+    private func iconActionButton(
+        icon: BuybackIconKind,
+        tint: Color,
+        accessibilityLabel: String,
+        isDisabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            LiquidGlassIcon(icon: icon, tint: tint, size: 54)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.42 : 1)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
     private func positionBreakdown(_ calculation: BuybackCalculation) -> some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: 12),
-                GridItem(.flexible(), spacing: 12)
-            ],
-            spacing: 12
-        ) {
-            MetricTile(title: "Required drop", value: calculation.requiredDropPercent.percentString, systemImage: "arrow.down.right")
-            MetricTile(title: "Gain", value: calculation.gainAtSellPercent.percentString, systemImage: "percent")
-            MetricTile(title: "Cost basis", value: calculation.averageCostBasis.moneyString(currencyCode: calculation.currencyCode), systemImage: "banknote")
-            MetricTile(title: "After-tax cash", value: calculation.afterTaxCash.moneyString(currencyCode: calculation.currencyCode), systemImage: "creditcard")
-            MetricTile(title: "Buyback cash", value: calculation.cashAvailableForBuyback.moneyString(currencyCode: calculation.currencyCode), systemImage: "cart")
-            MetricTile(title: "Tax estimate", value: calculation.taxAmount.moneyString(currencyCode: calculation.currencyCode), systemImage: "building.columns")
-            MetricTile(title: "Tax currency", value: calculation.taxAmountInTaxCurrency.moneyString(currencyCode: calculation.taxCurrencyCode), systemImage: "coloncurrencysign.circle")
-            MetricTile(title: "Tax profile", value: calculation.taxProfile.label, systemImage: "person.text.rectangle")
-            MetricTile(title: "Target shares", value: calculation.targetShareCount.shareString, systemImage: "plus.forwardslash.minus")
-            MetricTile(title: "Trading costs", value: (calculation.sellFeeTotal + calculation.buyFeeTotal).moneyString(currencyCode: calculation.currencyCode), systemImage: "receipt")
-            MetricTile(title: "Slippage", value: calculation.slippagePercent.compactPercentString, systemImage: "waveform.path.ecg")
-            if taxLotsEnabled {
-                MetricTile(title: "Basis source", value: "Tax lots", systemImage: "tablecells")
-            } else if calculation.fxRateToTaxCurrency != 1 || calculation.taxCurrencyCode != calculation.currencyCode {
-                MetricTile(title: "FX rate", value: calculation.fxRateToTaxCurrency.inputString, systemImage: "arrow.left.arrow.right")
+        VStack(alignment: .leading, spacing: 12) {
+            metricGroup("Outcome", icon: .target) {
+                metricRow("Required drop", value: calculation.requiredDropPercent.percentString, icon: .drop)
+                subtleDivider
+                metricRow("Gain at sale", value: calculation.gainAtSellPercent.percentString, icon: .percent)
+                subtleDivider
+                metricRow("Cost basis", value: calculation.averageCostBasis.moneyString(currencyCode: calculation.currencyCode), icon: .basis)
+                subtleDivider
+                metricRow("Target shares", value: calculation.targetShareCount.shareString, icon: .shares)
+            }
+
+            metricGroup("Cash flow", icon: .cash) {
+                metricRow("After-tax cash", value: calculation.afterTaxCash.moneyString(currencyCode: calculation.currencyCode), icon: .cash)
+                subtleDivider
+                metricRow("Buyback cash", value: calculation.cashAvailableForBuyback.moneyString(currencyCode: calculation.currencyCode), icon: .buybackCash)
+                subtleDivider
+                metricRow("Trading costs", value: (calculation.sellFeeTotal + calculation.buyFeeTotal).moneyString(currencyCode: calculation.currencyCode), icon: .costs)
+                subtleDivider
+                metricRow("Slippage buffer", value: calculation.slippagePercent.compactPercentString, icon: .slippage)
+            }
+
+            metricGroup("Tax assumptions", icon: .tax) {
+                metricRow("Tax estimate", value: calculation.taxAmount.moneyString(currencyCode: calculation.currencyCode), icon: .tax)
+                subtleDivider
+                metricRow("Tax currency", value: calculation.taxAmountInTaxCurrency.moneyString(currencyCode: calculation.taxCurrencyCode), icon: .taxCurrency)
+                subtleDivider
+                metricRow("Tax profile", value: calculation.taxProfile.label, icon: .taxProfile)
+                if taxLotsEnabled {
+                    subtleDivider
+                    metricRow("Basis source", value: "Tax lots", icon: .lots)
+                } else if calculation.fxRateToTaxCurrency != 1 || calculation.taxCurrencyCode != calculation.currencyCode {
+                    subtleDivider
+                    metricRow("FX rate", value: calculation.fxRateToTaxCurrency.inputString, icon: .fx)
+                }
             }
         }
     }
 
+    private func metricGroup<Rows: View>(
+        _ title: String,
+        icon: BuybackIconKind,
+        @ViewBuilder rows: () -> Rows
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(title, icon: icon)
+            VStack(spacing: 0) {
+                rows()
+            }
+        }
+        .liquidSurface()
+    }
+
+    private func metricRow(_ title: String, value: String, icon: BuybackIconKind) -> some View {
+        HStack(spacing: 11) {
+            BuybackIcon(icon, tint: LiquidPalette.accent)
+                .frame(width: 22, height: 22)
+
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .font(.subheadline.monospacedDigit().weight(.bold))
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+                .minimumScaleFactor(0.72)
+        }
+        .padding(.vertical, 9)
+    }
+
+    private var subtleDivider: some View {
+        Divider()
+            .opacity(0.42)
+    }
+
     private func sensitivitySection(_ calculation: BuybackCalculation) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionTitle("Price sensitivity", systemImage: "slider.horizontal.3")
+            SectionTitle("Price sensitivity", icon: .sensitivity)
 
             VStack(spacing: 8) {
                 ForEach(sensitivityRows(for: calculation)) { row in
@@ -860,7 +1032,12 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 9)
-                    .liquidCardBackground(tint: row.isBase ? LiquidPalette.accent.opacity(0.34) : LiquidPalette.blue.opacity(0.16))
+                    .background {
+                        if row.isBase {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(LiquidPalette.accent.opacity(0.10))
+                        }
+                    }
                 }
             }
         }
@@ -870,13 +1047,14 @@ struct ContentView: View {
     private func scenarioSection(_ calculation: BuybackCalculation) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                SectionTitle("Scenarios", systemImage: "tray.full")
+                SectionTitle("Scenarios", icon: .scenarios)
                 Spacer(minLength: 8)
 
                 Button {
                     saveScenario(calculation)
                 } label: {
-                    Image(systemName: "square.and.arrow.down")
+                    BuybackIcon(.save)
+                        .frame(width: 18, height: 18)
                 }
                 .buttonStyle(.glass)
                 .accessibilityLabel("Save current scenario")
@@ -913,7 +1091,7 @@ struct ContentView: View {
     private func alertSection(_ calculation: BuybackCalculation) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                SectionTitle("Price alert", systemImage: "bell")
+                SectionTitle("Price alert", icon: .alert)
                 Spacer(minLength: 8)
 
                 Button {
@@ -925,7 +1103,8 @@ struct ContentView: View {
                     )
                     evaluateAlert(calculation)
                 } label: {
-                    Image(systemName: "bell.badge")
+                    BuybackIcon(.alertArmed)
+                        .frame(width: 18, height: 18)
                 }
                 .buttonStyle(.glass)
                 .accessibilityLabel("Arm alert at buy-back limit")
@@ -942,7 +1121,7 @@ struct ContentView: View {
                     "Alert price",
                     text: $alertPriceText,
                     suffix: calculation.currencyCode,
-                    icon: "bell.and.waves.left.and.right",
+                    icon: .alert,
                     field: .alertPrice
                 )
 
@@ -956,7 +1135,7 @@ struct ContentView: View {
                         evaluateAlert(calculation)
                     }
                 } label: {
-                    Label("Arm", systemImage: "checkmark.circle")
+                    IconLabel("Arm", icon: .selected)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glass)
@@ -973,7 +1152,7 @@ struct ContentView: View {
                 Button(role: .destructive) {
                     alerts.disable(symbol: calculation.symbol)
                 } label: {
-                    Label("Disable alert", systemImage: "bell.slash")
+                    IconLabel("Disable alert", icon: .alertOff)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glass)
@@ -985,7 +1164,7 @@ struct ContentView: View {
     private var invalidState: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 9) {
-                LiquidGlassIcon(systemImage: "exclamationmark.triangle.fill", tint: .orange, size: 34)
+                LiquidGlassIcon(icon: .warning, tint: .orange, size: 34)
 
                 Text("Check inputs")
                     .font(.headline)
@@ -1001,7 +1180,7 @@ struct ContentView: View {
 
     private var widgetStatus: some View {
         HStack(spacing: 12) {
-            LiquidGlassIcon(systemImage: "rectangle.on.rectangle.angled", tint: LiquidPalette.blue, size: 38)
+            LiquidGlassIcon(icon: .widget, tint: LiquidPalette.blue, size: 38)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Home Screen widget")
@@ -1017,7 +1196,8 @@ struct ContentView: View {
             Button {
                 WidgetCenter.shared.reloadAllTimelines()
             } label: {
-                Image(systemName: "arrow.clockwise")
+                BuybackIcon(.refresh)
+                    .frame(width: 18, height: 18)
             }
             .buttonStyle(.glass)
             .accessibilityLabel("Reload widgets")
@@ -1397,7 +1577,7 @@ private struct SavedScenarioRow: View {
         HStack(alignment: .center, spacing: 12) {
             Button(action: onLoad) {
                 HStack(alignment: .center, spacing: 12) {
-                    LiquidGlassIcon(systemImage: "bookmark.fill", tint: LiquidPalette.blue, size: 34)
+                    LiquidGlassIcon(icon: .bookmark, tint: LiquidPalette.blue, size: 34)
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(scenario.displayTitle)
@@ -1417,7 +1597,8 @@ private struct SavedScenarioRow: View {
             .buttonStyle(.plain)
 
             Button(role: .destructive, action: onDelete) {
-                Image(systemName: "trash")
+                BuybackIcon(.clear)
+                    .frame(width: 18, height: 18)
             }
             .buttonStyle(.glass)
             .accessibilityLabel("Delete saved scenario")
@@ -1442,7 +1623,7 @@ private struct AssetSuggestionRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            LiquidGlassIcon(systemImage: "chart.line.uptrend.xyaxis", tint: LiquidPalette.blue, size: 34)
+            LiquidGlassIcon(icon: .market, tint: LiquidPalette.blue, size: 34)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(asset.name.nilIfBlank ?? asset.symbol)
@@ -1462,9 +1643,8 @@ private struct AssetSuggestionRow: View {
 
             Spacer(minLength: 8)
 
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
+            BuybackIcon(.chevron, tint: .secondary)
+                .frame(width: 14, height: 14)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
@@ -1479,7 +1659,7 @@ private struct SelectedAssetRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             LiquidGlassIcon(
-                systemImage: quote == nil ? "checkmark.circle" : "bolt.circle.fill",
+                icon: quote == nil ? .selected : .live,
                 tint: quote == nil ? .secondary : LiquidPalette.accent,
                 size: 34
             )
@@ -1509,8 +1689,8 @@ private struct QuoteStatusRow: View {
 
     var body: some View {
         HStack(spacing: 9) {
-            Image(systemName: manualPriceEnabled ? "pencil.circle" : "bolt.circle.fill")
-                .foregroundStyle(manualPriceEnabled ? Color.orange : Color.accentColor)
+            BuybackIcon(manualPriceEnabled ? .edit : .live, tint: manualPriceEnabled ? Color.orange : Color.accentColor)
+                .frame(width: 18, height: 18)
 
             Text(statusText)
                 .font(.caption)
@@ -1539,8 +1719,9 @@ private struct StatusRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
-            Image(systemName: message.style == .warning ? "exclamationmark.triangle.fill" : "info.circle")
-                .foregroundStyle(message.style == .warning ? .orange : .secondary)
+            BuybackIcon(message.style == .warning ? .warning : .info, tint: message.style == .warning ? .orange : .secondary)
+                .frame(width: 18, height: 18)
+                .padding(.top, 1)
 
             Text(message.text)
                 .font(.subheadline)
