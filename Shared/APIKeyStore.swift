@@ -34,12 +34,23 @@ enum APIKeyStore {
     private static let sharedAccessGroupIdentifier = "com.schtack.BuybackCalculator.apiKeys"
 
     static func string(for kind: APIKeyKind) throws -> String? {
-        if let accessGroup = sharedAccessGroup,
-           let value = try string(for: kind, accessGroup: accessGroup) {
-            return value
+        var firstError: Error?
+
+        if let accessGroup = sharedAccessGroup {
+            do {
+                if let value = try string(for: kind, accessGroup: accessGroup) {
+                    return value
+                }
+            } catch {
+                firstError = error
+            }
         }
 
-        return try string(for: kind, accessGroup: nil)
+        do {
+            return try string(for: kind, accessGroup: nil)
+        } catch {
+            throw firstError ?? error
+        }
     }
 
     static func set(_ value: String?, for kind: APIKeyKind) throws {
@@ -49,25 +60,39 @@ enum APIKeyStore {
             return
         }
 
+        var firstError: Error?
+
         if let accessGroup = sharedAccessGroup {
-            try set(trimmed, for: kind, accessGroup: accessGroup)
-            try? delete(kind, accessGroup: nil)
-        } else {
+            do {
+                try set(trimmed, for: kind, accessGroup: accessGroup)
+                try? delete(kind, accessGroup: nil)
+                return
+            } catch {
+                firstError = error
+            }
+        }
+
+        do {
             try set(trimmed, for: kind, accessGroup: nil)
+        } catch {
+            throw firstError ?? error
         }
     }
 
     static func delete(_ kind: APIKeyKind) throws {
         var firstError: Error?
+        var deletedOrMissing = false
+
         for accessGroup in [sharedAccessGroup, nil] {
             do {
                 try delete(kind, accessGroup: accessGroup)
+                deletedOrMissing = true
             } catch {
                 firstError = firstError ?? error
             }
         }
 
-        if let firstError {
+        if !deletedOrMissing, let firstError {
             throw firstError
         }
     }

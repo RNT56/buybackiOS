@@ -3,6 +3,7 @@ import SwiftUI
 enum BuybackIconKind: String, CaseIterable, Sendable {
     case appMark
     case settings
+    case keySettings
     case refresh
     case asset
     case lookupText
@@ -223,6 +224,15 @@ private enum BuybackIconDrawing {
                 path.addLine(to: outer)
                 stroke(path, opacity: 0.95, width: thinLine)
             }
+
+        case .keySettings:
+            stroke(circle(0.34, 0.42, 0.14), width: heavyLine)
+            stroke(poly([(0.44, 0.52), (0.74, 0.82)]), width: heavyLine)
+            stroke(line(0.60, 0.68, 0.70, 0.58), width: thinLine)
+            stroke(line(0.54, 0.28, 0.82, 0.28), opacity: 0.72, width: thinLine)
+            fill(circle(0.66, 0.28, 0.05), opacity: 0.82)
+            stroke(line(0.54, 0.44, 0.82, 0.44), opacity: 0.72, width: thinLine)
+            fill(circle(0.74, 0.44, 0.05), opacity: 0.82)
 
         case .refresh:
             stroke(arc(centerX: 0.5, centerY: 0.5, radius: 0.31, start: 35, end: 250), width: heavyLine)

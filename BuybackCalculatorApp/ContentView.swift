@@ -204,7 +204,7 @@ struct ContentView: View {
                     Button {
                         activeSheet = .settings
                     } label: {
-                        LiquidGlassActionIcon(icon: .settings, tint: LiquidPalette.blue)
+                        LiquidGlassActionIcon(icon: .keySettings, tint: LiquidPalette.blue)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Settings")
@@ -447,7 +447,7 @@ struct ContentView: View {
             }
 
             iconActionButton(
-                icon: .settings,
+                icon: .keySettings,
                 tint: LiquidPalette.blue,
                 accessibilityLabel: "Open settings"
             ) {
@@ -462,7 +462,13 @@ struct ContentView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
-                LiquidGlassIcon(icon: .appMark, tint: .teal, size: 46)
+                Button {
+                    activeSheet = .assetLookup
+                } label: {
+                    LiquidGlassIcon(icon: .appMark, tint: .teal, size: 46)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open stock input")
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayName)
@@ -562,7 +568,7 @@ struct ContentView: View {
                 apiKeysExpanded = true
                 activeSheet = .settings
             } label: {
-                LiquidGlassActionIcon(icon: .settings, tint: LiquidPalette.blue, size: 38)
+                LiquidGlassActionIcon(icon: .keySettings, tint: LiquidPalette.blue, size: 38)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open API key settings")
