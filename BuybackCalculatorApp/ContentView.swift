@@ -1,6 +1,17 @@
 import SwiftUI
 import WidgetKit
 
+private enum ContentSheet: String, Identifiable {
+    case settings
+    case assetLookup
+    case advancedCalculator
+    case resultDetails
+
+    var id: String {
+        rawValue
+    }
+}
+
 struct ContentView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -32,12 +43,10 @@ struct ContentView: View {
     @StateObject private var scenarios = SavedScenarioStore()
     @StateObject private var alerts = PriceAlertStore()
     @State private var manualPriceEnabled = false
-    @State private var advancedExpanded = false
     @State private var apiKeysExpanded = false
-    @State private var settingsPresented = false
+    @State private var activeSheet: ContentSheet?
     @State private var scenarioMessage: LookupMessage?
     @State private var startupScheduled = false
-    @State private var detailSectionsReady = false
 
     private var activeSymbol: String {
         lookup.selectedAsset?.symbol.nilIfBlank ?? symbolText.normalizedStockSymbol.nilIfBlank ?? assetQuery.normalizedStockSymbol
@@ -193,7 +202,7 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        settingsPresented = true
+                        activeSheet = .settings
                     } label: {
                         LiquidGlassActionIcon(icon: .settings, tint: LiquidPalette.blue)
                     }
@@ -221,32 +230,8 @@ struct ContentView: View {
             }
         }
         .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
-        .sheet(isPresented: $settingsPresented) {
-            NavigationStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        apiKeyPanel
-                        widgetStatus
-                    }
-                    .frame(maxWidth: 760, alignment: .leading)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 16)
-                }
-                .background {
-                    LiquidGlassBackground()
-                        .ignoresSafeArea()
-                }
-                .navigationTitle("Settings")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Done") {
-                            settingsPresented = false
-                        }
-                    }
-                }
-            }
-            .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+        .sheet(item: $activeSheet) { sheet in
+            sheetContent(sheet)
         }
         .onAppear {
             scheduleStartupIfNeeded()
@@ -275,14 +260,114 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    private func sheetContent(_ sheet: ContentSheet) -> some View {
+        switch sheet {
+        case .settings:
+            settingsSheet
+        case .assetLookup:
+            assetLookupSheet
+        case .advancedCalculator:
+            advancedCalculatorSheet
+        case .resultDetails:
+            resultDetailsSheet
+        }
+    }
+
+    private var settingsSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    apiKeyPanel
+                    widgetStatus
+                }
+                .frame(maxWidth: 760, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+            }
+            .background {
+                LiquidGlassBackground()
+                    .ignoresSafeArea()
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        activeSheet = nil
+                    }
+                }
+            }
+        }
+        .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+    }
+
+    private var assetLookupSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    lookupPanel
+                    if !apiKeys.hasUsableFinnhubAPIKey {
+                        apiKeyPrompt
+                    }
+                }
+                .frame(maxWidth: 760, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+            }
+            .background {
+                LiquidGlassBackground()
+                    .ignoresSafeArea()
+            }
+            .navigationTitle("Asset")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        activeSheet = nil
+                    }
+                }
+            }
+        }
+        .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+    }
+
+    private var resultDetailsSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if let calculation {
+                        resultDetails(calculation)
+                    } else {
+                        invalidState
+                    }
+                }
+                .frame(maxWidth: 760, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+            }
+            .background {
+                LiquidGlassBackground()
+                    .ignoresSafeArea()
+            }
+            .navigationTitle("Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        activeSheet = nil
+                    }
+                }
+            }
+        }
+        .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+    }
+
+    @ViewBuilder
     private var contentLayout: some View {
         if usesSplitLayout {
             HStack(alignment: .top, spacing: 18) {
-                VStack(alignment: .leading, spacing: 18) {
-                    primaryInputColumn
-                    widgetStatus
-                }
-                .frame(maxWidth: 500, alignment: .topLeading)
+                primaryInputColumn
+                    .frame(maxWidth: 500, alignment: .topLeading)
 
                 VStack(alignment: .leading, spacing: 18) {
                     resultColumn
@@ -296,21 +381,12 @@ struct ContentView: View {
                 if let calculation {
                     resultSummary(calculation)
                     resultActionBar(calculation)
-                }
-
-                lookupPanel
-                if !apiKeys.hasUsableFinnhubAPIKey {
-                    apiKeyPrompt
-                }
-                inputPanel
-
-                if detailSectionsReady, let calculation {
-                    resultDetails(calculation)
-                } else if calculation == nil {
+                } else {
                     invalidState
                 }
 
-                widgetStatus
+                inputPanel
+                launchActionDock(calculation: calculation)
             }
         }
     }
@@ -318,11 +394,8 @@ struct ContentView: View {
     private var primaryInputColumn: some View {
         VStack(alignment: .leading, spacing: 18) {
             header
-            lookupPanel
-            if !apiKeys.hasUsableFinnhubAPIKey {
-                apiKeyPrompt
-            }
             inputPanel
+            launchActionDock(calculation: calculation)
         }
     }
 
@@ -331,9 +404,6 @@ struct ContentView: View {
         if let calculation {
             resultSummary(calculation)
             resultActionBar(calculation)
-            if detailSectionsReady {
-                resultDetails(calculation)
-            }
         } else {
             invalidState
         }
@@ -345,6 +415,48 @@ struct ContentView: View {
             sensitivitySection(calculation)
             alertSection(calculation)
             scenarioSection(calculation)
+    }
+
+    private func launchActionDock(calculation: BuybackCalculation?) -> some View {
+        HStack(spacing: 14) {
+            Spacer(minLength: 0)
+
+            iconActionButton(
+                icon: .asset,
+                tint: LiquidPalette.blue,
+                accessibilityLabel: "Open asset lookup"
+            ) {
+                activeSheet = .assetLookup
+            }
+
+            iconActionButton(
+                icon: .sliders,
+                tint: LiquidPalette.accent,
+                accessibilityLabel: "Open advanced calculator settings"
+            ) {
+                activeSheet = .advancedCalculator
+            }
+
+            iconActionButton(
+                icon: .sensitivity,
+                tint: .orange,
+                accessibilityLabel: "Open calculation details",
+                isDisabled: calculation == nil
+            ) {
+                activeSheet = .resultDetails
+            }
+
+            iconActionButton(
+                icon: .settings,
+                tint: LiquidPalette.blue,
+                accessibilityLabel: "Open settings"
+            ) {
+                activeSheet = .settings
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
     }
 
     private var header: some View {
@@ -448,7 +560,7 @@ struct ContentView: View {
 
             Button {
                 apiKeysExpanded = true
-                settingsPresented = true
+                activeSheet = .settings
             } label: {
                 LiquidGlassActionIcon(icon: .settings, tint: LiquidPalette.blue, size: 38)
             }
@@ -531,81 +643,19 @@ struct ContentView: View {
     }
 
     private var inputPanel: some View {
-        calculatorPanelContent
-            .liquidSurface()
-            .sheet(isPresented: $advancedExpanded) {
-                advancedCalculatorSheet
-            }
-    }
-
-    private var calculatorPanelContent: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SectionTitle("Calculator", icon: .calculator)
-
-            calculatorCoreFields
-
-            toggleButton("Manual price override", icon: .edit, isOn: $manualPriceEnabled)
-
-            quoteStatus
-
-            Button {
-                advancedExpanded = true
-            } label: {
-                HStack(spacing: 10) {
-                    IconLabel("Advanced", icon: .sliders, iconSize: 17)
-                        .font(.headline)
-
-                    Spacer(minLength: 8)
-
-                    BuybackIcon(.chevron, tint: .secondary)
-                        .frame(width: 14, height: 14)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Advanced")
-            .accessibilityValue("Opens advanced calculator settings")
+        LaunchCalculatorPanel(
+            sellPriceText: $sellPriceText,
+            gainPercentText: $gainPercentText,
+            manualPriceEnabled: $manualPriceEnabled,
+            activeCurrencyCode: activeCurrencyCode,
+            quote: lookup.quote,
+            isFetchingQuote: lookup.isFetchingQuote,
+            isPriceLocked: lookup.quote != nil && !manualPriceEnabled,
+            isGainDisabled: taxLotsEnabled
+        ) {
+            activeSheet = .advancedCalculator
         }
-    }
-
-    private var calculatorCoreFields: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            decimalField(
-                "Current price",
-                text: $sellPriceText,
-                suffix: activeCurrencyCode,
-                icon: lookup.quote == nil || manualPriceEnabled ? .edit : .live,
-                field: .price,
-                isDisabled: lookup.quote != nil && !manualPriceEnabled
-            )
-
-            decimalField(
-                "Current gain",
-                text: $gainPercentText,
-                suffix: "%",
-                icon: .percent,
-                field: .gain,
-                keyboardType: .numbersAndPunctuation,
-                isDisabled: taxLotsEnabled
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var quoteStatus: some View {
-        if lookup.isFetchingQuote {
-            HStack(spacing: 10) {
-                ProgressView()
-                Text("Fetching latest price")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .liquidCapsuleSurface(tint: LiquidPalette.accent)
-        } else if let quote = lookup.quote {
-            QuoteStatusRow(quote: quote, manualPriceEnabled: manualPriceEnabled)
-        }
+        .liquidSurface()
     }
 
     private var advancedCalculatorSheet: some View {
@@ -630,7 +680,7 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
-                        advancedExpanded = false
+                        activeSheet = nil
                     }
                 }
             }
@@ -724,7 +774,7 @@ struct ContentView: View {
                 Spacer(minLength: 8)
 
                 LiquidGlassIcon(
-                    icon: isOn.wrappedValue ? .selected : .clear,
+                    icon: isOn.wrappedValue ? .selected : .toggleOff,
                     tint: isOn.wrappedValue ? LiquidPalette.accent : .secondary,
                     size: 30
                 )
@@ -1399,7 +1449,6 @@ struct ContentView: View {
 
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 120_000_000)
-            detailSectionsReady = true
             await apiKeys.loadAsync()
             configureLookupClient()
             apiKeysExpanded = !apiKeys.hasUsableFinnhubAPIKey
@@ -1565,6 +1614,135 @@ struct ContentView: View {
 
     private func dismissKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
+private struct LaunchCalculatorPanel: View {
+    @Binding var sellPriceText: String
+    @Binding var gainPercentText: String
+    @Binding var manualPriceEnabled: Bool
+
+    let activeCurrencyCode: String
+    let quote: MarketQuote?
+    let isFetchingQuote: Bool
+    let isPriceLocked: Bool
+    let isGainDisabled: Bool
+    let onOpenAdvanced: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                SectionTitle("Calculator", icon: .calculator)
+
+                Spacer(minLength: 8)
+
+                Button(action: onOpenAdvanced) {
+                    LiquidGlassActionIcon(icon: .sliders, size: 40)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open advanced calculator settings")
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                LaunchDecimalField(
+                    title: "Current price",
+                    text: $sellPriceText,
+                    suffix: activeCurrencyCode,
+                    icon: quote == nil || manualPriceEnabled ? .edit : .live,
+                    isDisabled: isPriceLocked
+                )
+
+                LaunchDecimalField(
+                    title: "Current gain",
+                    text: $gainPercentText,
+                    suffix: "%",
+                    icon: .percent,
+                    keyboardType: .numbersAndPunctuation,
+                    isDisabled: isGainDisabled
+                )
+            }
+
+            manualOverrideButton
+            quoteStatus
+        }
+    }
+
+    private var manualOverrideButton: some View {
+        Button {
+            manualPriceEnabled.toggle()
+        } label: {
+            HStack(spacing: 10) {
+                IconLabel("Manual price override", icon: .edit, iconSize: 16)
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer(minLength: 8)
+
+                LiquidGlassIcon(
+                    icon: manualPriceEnabled ? .selected : .toggleOff,
+                    tint: manualPriceEnabled ? LiquidPalette.accent : .secondary,
+                    size: 30
+                )
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Manual price override")
+        .accessibilityValue(manualPriceEnabled ? "On" : "Off")
+    }
+
+    @ViewBuilder
+    private var quoteStatus: some View {
+        if isFetchingQuote {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Fetching latest price")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .liquidCapsuleSurface(tint: LiquidPalette.accent)
+        } else if let quote {
+            QuoteStatusRow(quote: quote, manualPriceEnabled: manualPriceEnabled)
+        }
+    }
+}
+
+private struct LaunchDecimalField: View {
+    let title: String
+    @Binding var text: String
+    let suffix: String
+    let icon: BuybackIconKind
+    var keyboardType: UIKeyboardType = .decimalPad
+    var isDisabled = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            IconLabel(title, icon: icon, tint: .secondary, iconSize: 14)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.74)
+
+            HStack(spacing: 8) {
+                TextField(title, text: $text)
+                    .keyboardType(keyboardType)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.title3.weight(.semibold).monospacedDigit())
+                    .lineLimit(1)
+                    .disabled(isDisabled)
+
+                Text(suffix)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .textCase(.uppercase)
+            }
+            .padding(.horizontal, 13)
+            .frame(height: 52)
+            .liquidFieldSurface(isDisabled: isDisabled)
+        }
     }
 }
 

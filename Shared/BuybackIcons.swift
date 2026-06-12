@@ -42,6 +42,7 @@ enum BuybackIconKind: String, CaseIterable, Sendable {
     case widget
     case market
     case selected
+    case toggleOff
     case warning
     case info
     case chevron
@@ -422,6 +423,10 @@ private enum BuybackIconDrawing {
         case .selected:
             stroke(circle(0.50, 0.50, 0.31), width: heavyLine)
             stroke(poly([(0.33, 0.51), (0.45, 0.63), (0.69, 0.39)]), width: heavyLine)
+
+        case .toggleOff:
+            stroke(circle(0.50, 0.50, 0.31), width: heavyLine)
+            stroke(circle(0.50, 0.50, 0.13), opacity: 0.45, width: thinLine)
 
         case .warning:
             stroke(poly([(0.50, 0.18), (0.83, 0.77), (0.17, 0.77)], closed: true), width: heavyLine)
