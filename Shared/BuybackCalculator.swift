@@ -220,10 +220,6 @@ enum BuybackCalculator {
         BuybackInputs()
     }
 
-    static var sampleCalculation: BuybackCalculation {
-        calculate(inputs: defaultInputs)!
-    }
-
     static func calculate(inputs: BuybackInputs) -> BuybackCalculation? {
         calculate(
             symbol: inputs.symbol,

@@ -81,10 +81,12 @@ final class MarketLookupViewModel: ObservableObject {
     }
 
     func prepareSelection(_ asset: MarketAsset) {
+        quoteRequestID = UUID()
         selectedAsset = asset
         suggestions = []
         message = nil
         quote = nil
+        isFetchingQuote = false
     }
 
     func restoreSelection(_ asset: MarketAsset) {
@@ -92,8 +94,10 @@ final class MarketLookupViewModel: ObservableObject {
     }
 
     func clearSelection() {
+        quoteRequestID = UUID()
         selectedAsset = nil
         quote = nil
+        isFetchingQuote = false
     }
 
     func fetchQuote(for asset: MarketAsset) async -> MarketQuote? {

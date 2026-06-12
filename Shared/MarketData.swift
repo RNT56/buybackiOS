@@ -315,7 +315,11 @@ struct OpenFIGIIdentifierResolver: Sendable {
             )
         ]
 
-        var request = URLRequest(url: URL(string: "https://api.openfigi.com/v3/mapping")!)
+        guard let url = URL(string: "https://api.openfigi.com/v3/mapping") else {
+            throw MarketDataError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let apiKey {
