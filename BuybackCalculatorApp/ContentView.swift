@@ -6,9 +6,41 @@ private enum ContentSheet: String, Identifiable {
     case assetLookup
     case advancedCalculator
     case resultDetails
+    case freezeEditor
 
     var id: String {
         rawValue
+    }
+}
+
+private enum DockAction: String, Hashable {
+    case asset
+    case advanced
+    case details
+    case settings
+}
+
+private enum DetailTab: String, CaseIterable, Identifiable {
+    case breakdown
+    case scenarios
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .breakdown:
+            return "Breakdown"
+        case .scenarios:
+            return "Scenarios"
+        }
+    }
+}
+
+private struct TopChromeOffsetPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
@@ -30,6 +62,7 @@ struct ContentView: View {
     @AppStorage("buybackCalculator.buyFee") private var buyFeeText = BuybackCalculator.defaultBuyFeeTotal.inputString
     @AppStorage("buybackCalculator.slippage") private var slippageText = BuybackCalculator.defaultSlippagePercent.inputString
     @AppStorage("buybackCalculator.taxLotsEnabled") private var taxLotsEnabled = false
+    @AppStorage("buybackCalculator.taxLots") private var taxLotsData = ""
     @AppStorage("buybackCalculator.lot1Shares") private var lot1SharesText = ""
     @AppStorage("buybackCalculator.lot1Basis") private var lot1BasisText = ""
     @AppStorage("buybackCalculator.lot2Shares") private var lot2SharesText = ""
@@ -45,8 +78,23 @@ struct ContentView: View {
     @State private var manualPriceEnabled = false
     @State private var apiKeysExpanded = false
     @State private var activeSheet: ContentSheet?
+    @State private var detailTab = DetailTab.breakdown
     @State private var scenarioMessage: LookupMessage?
+    @State private var scenarioQuotes: [UUID: MarketQuote] = [:]
+    @State private var scenarioMessages: [UUID: LookupMessage] = [:]
+    @State private var scenarioRefreshingIDs: Set<UUID> = []
+    @State private var isRefreshingScenarios = false
+    @State private var editableTaxLots: [EditableTaxLot] = [EditableTaxLot()]
+    @State private var taxLotsRestored = false
     @State private var startupScheduled = false
+    @State private var shouldFocusAssetLookup = false
+    @State private var selectedDockAction: DockAction = .asset
+    @State private var freezeEditorScenario: SavedBuybackScenario?
+    @State private var freezePriceText = ""
+    @State private var freezeCurrencyCode = BuybackCalculator.defaultCurrencyCode
+    @State private var freezeQuoteTimestamp: Date?
+    @State private var topChromeBlurProgress = 0.0
+    @FocusState private var assetLookupFieldFocused: Bool
 
     private var activeSymbol: String {
         lookup.selectedAsset?.symbol.nilIfBlank ?? symbolText.normalizedStockSymbol.nilIfBlank ?? assetQuery.normalizedStockSymbol
@@ -113,11 +161,7 @@ struct ContentView: View {
     }
 
     private var taxLots: [TaxLot] {
-        [
-            taxLot(sharesText: lot1SharesText, basisText: lot1BasisText),
-            taxLot(sharesText: lot2SharesText, basisText: lot2BasisText),
-            taxLot(sharesText: lot3SharesText, basisText: lot3BasisText)
-        ].compactMap { $0 }
+        editableTaxLots.compactMap(\.taxLot)
     }
 
     private var lotAverageCostBasis: Double? {
@@ -186,47 +230,35 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                contentLayout
-                    .frame(maxWidth: usesSplitLayout ? 1180 : 760, alignment: .leading)
-                    .padding(.horizontal, 18)
-                    .padding(.top, 16)
-                    .padding(.bottom, floatingDockScrollPadding)
+            ZStack(alignment: .top) {
+                ScrollView {
+                    scrollOffsetReader
+                    contentLayout
+                        .frame(maxWidth: usesSplitLayout ? 1180 : 760, alignment: .leading)
+                        .padding(.horizontal, 18)
+                        .padding(.top, topChromeScrollPadding)
+                        .padding(.bottom, floatingDockScrollPadding)
+                }
+                .coordinateSpace(name: "buybackMainScroll")
+                .background {
+                    LiquidGlassBackground()
+                        .ignoresSafeArea()
+                }
+                .overlay(alignment: .bottom) {
+                    launchActionDock(calculation: calculation)
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, -18)
+                        .ignoresSafeArea(.container, edges: .bottom)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onPreferenceChange(TopChromeOffsetPreferenceKey.self) { offset in
+                    updateTopChromeBlurProgress(offset)
+                }
+
+                topNavigationChrome
             }
-            .background {
-                LiquidGlassBackground()
-                    .ignoresSafeArea()
-            }
-            .overlay(alignment: .bottom) {
-                launchActionDock(calculation: calculation)
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, 12)
-            }
-            .navigationTitle("Buy-Back")
-            .navigationBarTitleDisplayMode(.inline)
-            .scrollDismissesKeyboard(.interactively)
+            .toolbar(.hidden, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        activeSheet = .settings
-                    } label: {
-                        LiquidGlassActionIcon(icon: .keySettings, tint: LiquidPalette.blue)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Settings")
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        refreshSelectedQuote()
-                    } label: {
-                        LiquidGlassActionIcon(icon: .refresh)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
-                    .accessibilityLabel("Refresh price")
-                }
-
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("Done") {
@@ -235,12 +267,21 @@ struct ContentView: View {
                 }
             }
         }
-        .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+        .tint(LiquidPalette.accent)
         .sheet(item: $activeSheet) { sheet in
             sheetContent(sheet)
         }
         .onAppear {
+            restoreTaxLotsIfNeeded()
             scheduleStartupIfNeeded()
+        }
+        .onChange(of: editableTaxLots) { _, _ in
+            persistTaxLots()
+        }
+        .onChange(of: taxLotsEnabled) { _, isEnabled in
+            if isEnabled {
+                ensureEditableTaxLotRow()
+            }
         }
         .onChange(of: assetQuery) { _, newValue in
             if newValue.normalizedStockSymbol != lookup.selectedAsset?.symbol {
@@ -276,6 +317,8 @@ struct ContentView: View {
             advancedCalculatorSheet
         case .resultDetails:
             resultDetailsSheet
+        case .freezeEditor:
+            freezeEditorSheet
         }
     }
 
@@ -304,7 +347,7 @@ struct ContentView: View {
                 }
             }
         }
-        .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+        .tint(LiquidPalette.accent)
     }
 
     private var assetLookupSheet: some View {
@@ -334,7 +377,16 @@ struct ContentView: View {
                 }
             }
         }
-        .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+        .tint(LiquidPalette.accent)
+        .onAppear {
+            if shouldFocusAssetLookup {
+                focusAssetLookupField()
+            }
+        }
+        .onDisappear {
+            assetLookupFieldFocused = false
+            shouldFocusAssetLookup = false
+        }
     }
 
     private var resultDetailsSheet: some View {
@@ -342,7 +394,19 @@ struct ContentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if let calculation {
-                        resultDetails(calculation)
+                        Picker("Details", selection: $detailTab) {
+                            ForEach(DetailTab.allCases) { tab in
+                                Text(tab.label).tag(tab)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        switch detailTab {
+                        case .breakdown:
+                            resultDetails(calculation)
+                        case .scenarios:
+                            scenarioComparisonSection(calculation)
+                        }
                     } else {
                         invalidState
                     }
@@ -365,7 +429,59 @@ struct ContentView: View {
                 }
             }
         }
-        .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+        .tint(LiquidPalette.accent)
+    }
+
+    private var freezeEditorSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        SectionTitle(freezeEditorScenario?.isFrozen == true ? "Edit freeze" : "Freeze sell price", icon: .bookmark)
+
+                        if let scenario = freezeEditorScenario {
+                            StatusRow(message: .info("Freeze \(scenario.displaySymbol) at the actual sell price. The rebuy limit will stay based on this price while live quotes track the buy-back opportunity."))
+                        }
+
+                        decimalField(
+                            "Frozen sell price",
+                            text: $freezePriceText,
+                            suffix: freezeCurrencyCode,
+                            icon: .price,
+                            field: .price
+                        )
+
+                        Button {
+                            confirmFreezeEditor()
+                        } label: {
+                            LiquidGlassActionIcon(icon: .selected, size: 44)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(height: 52)
+                        .accessibilityLabel("Save frozen sell price")
+                    }
+                    .liquidSurface()
+                }
+                .frame(maxWidth: 760, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+            }
+            .background {
+                LiquidGlassBackground()
+                    .ignoresSafeArea()
+            }
+            .navigationTitle("Freeze")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        activeSheet = nil
+                    }
+                }
+            }
+        }
+        .tint(LiquidPalette.accent)
     }
 
     @ViewBuilder
@@ -404,7 +520,78 @@ struct ContentView: View {
     }
 
     private var floatingDockScrollPadding: CGFloat {
-        104
+        72
+    }
+
+    private var topChromeScrollPadding: CGFloat {
+        76
+    }
+
+    private var scrollOffsetReader: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(
+                key: TopChromeOffsetPreferenceKey.self,
+                value: proxy.frame(in: .named("buybackMainScroll")).minY
+            )
+        }
+        .frame(height: 0)
+        .accessibilityHidden(true)
+    }
+
+    private var topNavigationChrome: some View {
+        ZStack(alignment: .top) {
+            TopChromeBlurBackground(progress: topChromeBlurProgress)
+                .frame(height: 96)
+                .offset(y: -10)
+                .ignoresSafeArea(edges: .top)
+
+            HStack(alignment: .center) {
+                Button {
+                    selectDockAction(.settings)
+                    activeSheet = .settings
+                } label: {
+                    LiquidToolbarIcon(icon: .keySettings, controlSize: 46)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Settings")
+
+                Spacer(minLength: 12)
+
+                Text("Buy-Back")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+
+                Spacer(minLength: 12)
+
+                Button {
+                    refreshSelectedQuote()
+                } label: {
+                    LiquidToolbarIcon(icon: .refresh, controlSize: 46)
+                }
+                .buttonStyle(.plain)
+                .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
+                .accessibilityLabel("Refresh price")
+            }
+            .frame(maxWidth: 760)
+            .padding(.horizontal, 22)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+        .zIndex(10)
+    }
+
+    private func updateTopChromeBlurProgress(_ offset: CGFloat) {
+        let scrolledDistance = max(0, -offset)
+        let progress = min(1, Double(scrolledDistance / 34))
+
+        guard abs(progress - topChromeBlurProgress) > 0.015 else { return }
+
+        withAnimation(.easeOut(duration: 0.16)) {
+            topChromeBlurProgress = progress
+        }
     }
 
     @ViewBuilder
@@ -420,59 +607,63 @@ struct ContentView: View {
     @ViewBuilder
     private func resultDetails(_ calculation: BuybackCalculation) -> some View {
             positionBreakdown(calculation)
+            calculationTrace(calculation)
             sensitivitySection(calculation)
             alertSection(calculation)
-            scenarioSection(calculation)
     }
 
     private func launchActionDock(calculation: BuybackCalculation?) -> some View {
-        HStack(spacing: 14) {
-            iconActionButton(
-                icon: .asset,
-                tint: LiquidPalette.blue,
-                accessibilityLabel: "Open asset lookup"
-            ) {
-                activeSheet = .assetLookup
-            }
+        GlassEffectContainer(spacing: 6) {
+            HStack(spacing: 6) {
+                dockIconButton(
+                    action: .asset,
+                    icon: .asset,
+                    tint: LiquidPalette.accent,
+                    accessibilityLabel: "Open asset lookup"
+                ) {
+                    openAssetLookup()
+                }
 
-            iconActionButton(
-                icon: .sliders,
-                tint: LiquidPalette.accent,
-                accessibilityLabel: "Open advanced calculator settings"
-            ) {
-                activeSheet = .advancedCalculator
-            }
+                dockIconButton(
+                    action: .advanced,
+                    icon: .sliders,
+                    tint: LiquidPalette.accent,
+                    accessibilityLabel: "Open advanced calculator settings"
+                ) {
+                    activeSheet = .advancedCalculator
+                }
 
-            iconActionButton(
-                icon: .sensitivity,
-                tint: .orange,
-                accessibilityLabel: "Open calculation details",
-                isDisabled: calculation == nil
-            ) {
-                activeSheet = .resultDetails
-            }
+                dockIconButton(
+                    action: .details,
+                    icon: .sensitivity,
+                    tint: LiquidPalette.muted,
+                    accessibilityLabel: "Open calculation details",
+                    isDisabled: calculation == nil
+                ) {
+                    activeSheet = .resultDetails
+                }
 
-            iconActionButton(
-                icon: .keySettings,
-                tint: LiquidPalette.blue,
-                accessibilityLabel: "Open settings"
-            ) {
-                activeSheet = .settings
+                dockIconButton(
+                    action: .settings,
+                    icon: .keySettings,
+                    tint: LiquidPalette.accent,
+                    accessibilityLabel: "Open settings"
+                ) {
+                    activeSheet = .settings
+                }
             }
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .glassEffect(.regular.tint(LiquidPalette.glassTint.opacity(0.062)).interactive(), in: Capsule())
+        .shadow(color: .black.opacity(0.055), radius: 15, y: 7)
+        .animation(.spring(response: 0.34, dampingFraction: 0.78), value: selectedDockAction)
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
-                Button {
-                    activeSheet = .assetLookup
-                } label: {
-                    LiquidGlassIcon(icon: .appMark, tint: .teal, size: 46)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open stock input")
+                LiquidGlassActionIcon(icon: .appMark, tint: LiquidPalette.accent, size: 46)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayName)
@@ -487,6 +678,17 @@ struct ContentView: View {
                 }
 
                 Spacer(minLength: 8)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                openAssetLookup()
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Open stock input")
+            .accessibilityHint("Search by company name, ticker, ISIN, or WKN.")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                openAssetLookup()
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -515,6 +717,11 @@ struct ContentView: View {
                 TextField("AAPL, Apple, US0378331005", text: $assetQuery)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
+                    .focused($assetLookupFieldFocused)
+                    .submitLabel(.search)
+                    .onSubmit {
+                        selectFirstSuggestedAsset()
+                    }
                     .font(.title3.weight(.semibold))
                     .padding(.horizontal, 13)
                     .frame(height: 52)
@@ -530,7 +737,7 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .liquidCapsuleSurface(tint: LiquidPalette.blue)
+                .liquidCapsuleSurface(tint: LiquidPalette.accent)
             } else if !lookup.suggestions.isEmpty {
                 VStack(spacing: 8) {
                     ForEach(lookup.suggestions) { asset in
@@ -555,7 +762,7 @@ struct ContentView: View {
 
     private var apiKeyPrompt: some View {
         HStack(spacing: 12) {
-            LiquidGlassIcon(icon: .key, tint: .orange, size: 38)
+            LiquidGlassIcon(icon: .key, tint: LiquidPalette.muted, size: 38)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Live prices are off")
@@ -570,9 +777,10 @@ struct ContentView: View {
 
             Button {
                 apiKeysExpanded = true
+                selectDockAction(.settings)
                 activeSheet = .settings
             } label: {
-                LiquidGlassActionIcon(icon: .keySettings, tint: LiquidPalette.blue, size: 38)
+                LiquidGlassActionIcon(icon: .keySettings, tint: LiquidPalette.accent, size: 38)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open API key settings")
@@ -621,6 +829,10 @@ struct ContentView: View {
                             .liquidFieldSurface()
                     }
 
+                    if let validationMessage = apiKeys.validationMessage {
+                        StatusRow(message: .warning(validationMessage))
+                    }
+
                     HStack(spacing: 10) {
                         Button {
                             apiKeys.save()
@@ -632,6 +844,7 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.plain)
+                        .disabled(!apiKeys.canSave)
                         .accessibilityLabel("Save API keys")
 
                         Button(role: .destructive) {
@@ -640,7 +853,7 @@ struct ContentView: View {
                             lookup.scheduleSearch(query: assetQuery)
                             WidgetCenter.shared.reloadAllTimelines()
                         } label: {
-                            LiquidGlassActionIcon(icon: .clear, tint: .red, size: 44)
+                            LiquidGlassActionIcon(icon: .clear, tint: LiquidPalette.danger, size: 44)
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.plain)
@@ -665,6 +878,7 @@ struct ContentView: View {
             isPriceLocked: lookup.quote != nil && !manualPriceEnabled,
             isGainDisabled: taxLotsEnabled
         ) {
+            selectDockAction(.advanced)
             activeSheet = .advancedCalculator
         }
         .liquidSurface()
@@ -697,7 +911,7 @@ struct ContentView: View {
                 }
             }
         }
-        .tint(Color(red: 0.02, green: 0.66, blue: 0.62))
+        .tint(LiquidPalette.accent)
     }
 
     private var advancedPositionContent: some View {
@@ -717,9 +931,25 @@ struct ContentView: View {
 
     private var taxLotContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            taxLotRow(title: "Lot 1", shares: $lot1SharesText, basis: $lot1BasisText, sharesField: .lot1Shares, basisField: .lot1Basis)
-            taxLotRow(title: "Lot 2", shares: $lot2SharesText, basis: $lot2BasisText, sharesField: .lot2Shares, basisField: .lot2Basis)
-            taxLotRow(title: "Lot 3", shares: $lot3SharesText, basis: $lot3BasisText, sharesField: .lot3Shares, basisField: .lot3Basis)
+            ForEach($editableTaxLots) { $lot in
+                taxLotRow(lot: $lot, index: taxLotIndex(for: lot.id))
+            }
+
+            Button {
+                addTaxLotRow()
+            } label: {
+                HStack(spacing: 10) {
+                    IconLabel("Add lot", icon: .lots, iconSize: 16)
+                        .font(.subheadline.weight(.semibold))
+
+                    Spacer(minLength: 8)
+
+                    LiquidGlassActionIcon(icon: .selected, size: 34)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add tax lot")
 
             if let lotSharesToSell, let lotAverageCostBasis {
                 StatusRow(message: .info("Selling \(lotSharesToSell.shareString) shares at weighted basis \(lotAverageCostBasis.moneyString(currencyCode: activeCurrencyCode))."))
@@ -747,6 +977,20 @@ struct ContentView: View {
                 textField("Tax currency", text: $taxCurrencyText, suffix: "ccy", icon: .taxCurrency, field: .taxCurrency)
                 decimalField("FX to tax currency", text: $fxRateText, suffix: "x", icon: .fx, field: .fxRate)
             }
+
+            VStack(alignment: .leading, spacing: 6) {
+                IconLabel(taxProfile.assumptionSummary, icon: .info, tint: .secondary, iconSize: 14)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(taxProfile.assumptionDetails)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .liquidCardBackground(tint: LiquidPalette.muted.opacity(0.16))
         }
         .liquidSurface()
     }
@@ -905,26 +1149,37 @@ struct ContentView: View {
     }
 
     private func taxLotRow(
-        title: String,
-        shares: Binding<String>,
-        basis: Binding<String>,
-        sharesField: CalculatorField,
-        basisField: CalculatorField
+        lot: Binding<EditableTaxLot>,
+        index: Int
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
+            HStack(spacing: 8) {
+                Text("Lot \(index + 1)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                Spacer(minLength: 8)
+
+                if editableTaxLots.count > 1 {
+                    Button(role: .destructive) {
+                        removeTaxLotRow(id: lot.wrappedValue.id)
+                    } label: {
+                        LiquidGlassActionIcon(icon: .clear, tint: LiquidPalette.danger, size: 30)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Remove tax lot \(index + 1)")
+                }
+            }
 
             VStack(alignment: .leading, spacing: 12) {
-                decimalField("Shares", text: shares, suffix: "sh", icon: .shares, field: sharesField)
-                decimalField("Basis", text: basis, suffix: activeCurrencyCode, icon: .basis, field: basisField)
+                decimalField("Shares", text: lot.sharesText, suffix: "sh", icon: .shares, field: .lotShares)
+                decimalField("Basis", text: lot.basisText, suffix: activeCurrencyCode, icon: .basis, field: .lotBasis)
             }
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
-        .liquidCardBackground(tint: LiquidPalette.blue.opacity(0.14))
+        .liquidCardBackground(tint: LiquidPalette.accent.opacity(0.14))
     }
 
     private func resultSummary(_ calculation: BuybackCalculation) -> some View {
@@ -964,7 +1219,7 @@ struct ContentView: View {
 
             iconActionButton(
                 icon: .refresh,
-                tint: LiquidPalette.blue,
+                tint: LiquidPalette.accent,
                 accessibilityLabel: "Refresh selected price",
                 isDisabled: lookup.selectedAsset == nil || lookup.isFetchingQuote
             ) {
@@ -973,7 +1228,7 @@ struct ContentView: View {
 
             iconActionButton(
                 icon: .alertArmed,
-                tint: .orange,
+                tint: LiquidPalette.muted,
                 accessibilityLabel: "Arm alert at buy-back limit"
             ) {
                 alertPriceText = calculation.maximumBuybackPrice.inputString
@@ -983,6 +1238,14 @@ struct ContentView: View {
                     currencyCode: calculation.currencyCode
                 )
                 evaluateAlert(calculation)
+            }
+
+            iconActionButton(
+                icon: .bookmark,
+                tint: LiquidPalette.muted,
+                accessibilityLabel: "Freeze current sell price"
+            ) {
+                freezeCurrentScenario(calculation)
             }
 
             iconActionButton(
@@ -1004,13 +1267,34 @@ struct ContentView: View {
         isDisabled: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
-            LiquidGlassIcon(icon: icon, tint: tint, size: 54)
+        NativeGlassIconButton(
+            symbol: icon.systemSymbolName,
+            tint: tint,
+            accessibilityLabel: accessibilityLabel,
+            isDisabled: isDisabled,
+            action: action
+        )
+    }
+
+    private func dockIconButton(
+        action dockAction: DockAction,
+        icon: BuybackIconKind,
+        tint: Color,
+        accessibilityLabel: String,
+        isDisabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        NativeGlassIconButton(
+            symbol: icon.systemSymbolName,
+            tint: tint,
+            accessibilityLabel: accessibilityLabel,
+            size: 44,
+            isSelected: selectedDockAction == dockAction,
+            isDisabled: isDisabled
+        ) {
+            selectDockAction(dockAction)
+            action()
         }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
-        .opacity(isDisabled ? 0.42 : 1)
-        .accessibilityLabel(accessibilityLabel)
     }
 
     private func positionBreakdown(_ calculation: BuybackCalculation) -> some View {
@@ -1041,6 +1325,8 @@ struct ContentView: View {
                 metricRow("Tax currency", value: calculation.taxAmountInTaxCurrency.moneyString(currencyCode: calculation.taxCurrencyCode), icon: .taxCurrency)
                 subtleDivider
                 metricRow("Tax profile", value: calculation.taxProfile.label, icon: .taxProfile)
+                subtleDivider
+                metricRow("Assumption", value: calculation.taxProfile.assumptionSummary, icon: .info)
                 if taxLotsEnabled {
                     subtleDivider
                     metricRow("Basis source", value: "Tax lots", icon: .lots)
@@ -1050,6 +1336,82 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private func calculationTrace(_ calculation: BuybackCalculation) -> some View {
+        metricGroup("Calculation trace", icon: .calculator) {
+            traceRow(
+                "Gross sale",
+                value: calculation.grossProceeds.moneyString(currencyCode: calculation.currencyCode),
+                detail: "\(calculation.sharesToSell.shareString) shares x \(calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode))",
+                icon: .price
+            )
+            subtleDivider
+            traceRow(
+                "Net sale proceeds",
+                value: calculation.netSaleProceeds.moneyString(currencyCode: calculation.currencyCode),
+                detail: "Gross sale minus \(calculation.sellFeeTotal.moneyString(currencyCode: calculation.currencyCode)) sell fees",
+                icon: .cash
+            )
+            subtleDivider
+            traceRow(
+                "Taxable gain",
+                value: calculation.taxableGainTotal.moneyString(currencyCode: calculation.currencyCode),
+                detail: "Net sale proceeds minus \(calculation.costBasisTotal.moneyString(currencyCode: calculation.currencyCode)) cost basis",
+                icon: .tax
+            )
+            subtleDivider
+            traceRow(
+                "After-tax cash",
+                value: calculation.afterTaxCash.moneyString(currencyCode: calculation.currencyCode),
+                detail: "Net sale proceeds minus \(calculation.taxAmount.moneyString(currencyCode: calculation.currencyCode)) tax estimate",
+                icon: .cash
+            )
+            subtleDivider
+            traceRow(
+                "Buyback cash",
+                value: calculation.cashAvailableForBuyback.moneyString(currencyCode: calculation.currencyCode),
+                detail: "After-tax cash minus \(calculation.buyFeeTotal.moneyString(currencyCode: calculation.currencyCode)) buy fees",
+                icon: .buybackCash
+            )
+            subtleDivider
+            traceRow(
+                "Maximum buy-back price",
+                value: calculation.maximumBuybackPrice.moneyString(currencyCode: calculation.currencyCode),
+                detail: "\(calculation.targetShareCount.shareString) target shares with \(calculation.slippagePercent.compactPercentString) slippage buffer",
+                icon: .limit
+            )
+        }
+    }
+
+    private func traceRow(_ title: String, value: String, detail: String, icon: BuybackIconKind) -> some View {
+        HStack(alignment: .top, spacing: 11) {
+            BuybackIcon(icon, tint: LiquidPalette.accent)
+                .frame(width: 22, height: 22)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 12)
+
+                    Text(value)
+                        .font(.subheadline.monospacedDigit().weight(.bold))
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.72)
+                }
+
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 9)
     }
 
     private func metricGroup<Rows: View>(
@@ -1100,7 +1462,7 @@ struct ContentView: View {
                     HStack(spacing: 10) {
                         Text(row.label)
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(row.isBase ? Color.accentColor : Color.secondary)
+                                .foregroundStyle(row.isBase ? LiquidPalette.accent : Color.secondary)
                             .frame(width: 48, alignment: .leading)
 
                         Text(row.sellPrice.moneyString(currencyCode: calculation.currencyCode))
@@ -1119,7 +1481,7 @@ struct ContentView: View {
                     .padding(.vertical, 9)
                     .background {
                         if row.isBase {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            RoundedRectangle(cornerRadius: LiquidMetrics.compactCardRadius, style: .continuous)
                                 .fill(LiquidPalette.accent.opacity(0.10))
                         }
                     }
@@ -1129,24 +1491,37 @@ struct ContentView: View {
         .liquidSurface()
     }
 
-    private func scenarioSection(_ calculation: BuybackCalculation) -> some View {
+    private func scenarioComparisonSection(_ calculation: BuybackCalculation) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 SectionTitle("Scenarios", icon: .scenarios)
                 Spacer(minLength: 8)
 
-                Button {
-                    saveScenario(calculation)
-                } label: {
-                    LiquidGlassActionIcon(icon: .save, size: 40)
+                HStack(spacing: 10) {
+                    Button {
+                        saveScenario(calculation)
+                    } label: {
+                        LiquidGlassActionIcon(icon: .save, size: 40)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Save current scenario")
+
+                    Button {
+                        refreshScenarioQuotes()
+                    } label: {
+                        LiquidGlassActionIcon(icon: .refresh, tint: LiquidPalette.accent, size: 40)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(scenarios.scenarios.isEmpty || isRefreshingScenarios)
+                    .accessibilityLabel("Refresh all saved scenario prices")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Save current scenario")
             }
 
             if let scenarioMessage {
                 StatusRow(message: scenarioMessage)
             }
+
+            StatusRow(message: .info("Watching scenarios model the live quote as the sell price. Frozen scenarios keep the sell price fixed and compare the buy-back limit against refreshed live prices."))
 
             if scenarios.scenarios.isEmpty {
                 Text("No saved scenarios yet.")
@@ -1155,14 +1530,29 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 11)
                     .padding(.vertical, 10)
-                    .liquidCardBackground(tint: LiquidPalette.blue.opacity(0.16))
+                    .liquidCardBackground(tint: LiquidPalette.accent.opacity(0.16))
             } else {
                 VStack(spacing: 8) {
                     ForEach(scenarios.scenarios) { scenario in
-                        SavedScenarioRow(scenario: scenario) {
+                        ScenarioComparisonRow(
+                            scenario: scenario,
+                            quote: scenarioQuotes[scenario.id],
+                            calculation: scenario.calculation(using: scenarioQuotes[scenario.id]),
+                            alert: alerts.alert(for: scenario.displaySymbol),
+                            message: scenarioMessages[scenario.id],
+                            isRefreshing: scenarioRefreshingIDs.contains(scenario.id)
+                        ) {
                             loadScenario(scenario)
+                        } onFreeze: {
+                            openFreezeEditor(scenario)
+                        } onEditFreeze: {
+                            openFreezeEditor(scenario)
+                        } onUnfreeze: {
+                            unfreezeScenario(scenario)
                         } onDelete: {
                             scenarios.delete(scenario)
+                            scenarioQuotes.removeValue(forKey: scenario.id)
+                            scenarioMessages.removeValue(forKey: scenario.id)
                             WidgetCenter.shared.reloadAllTimelines()
                             scenarioMessage = .info("Scenario deleted.")
                         }
@@ -1188,7 +1578,7 @@ struct ContentView: View {
                     )
                     evaluateAlert(calculation)
                 } label: {
-                    LiquidGlassActionIcon(icon: .alertArmed, tint: .orange, size: 40)
+                    LiquidGlassActionIcon(icon: .alertArmed, tint: LiquidPalette.muted, size: 40)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Arm alert at buy-back limit")
@@ -1222,16 +1612,18 @@ struct ContentView: View {
             }
 
             if let alert = alerts.alert(for: calculation.symbol), alert.isEnabled {
-                StatusRow(message: .info("Armed for \(alert.targetPrice.moneyString(currencyCode: alert.currencyCode)). Alerts are checked on quote refresh."))
+                StatusRow(message: .info("Armed for \(alert.targetPrice.moneyString(currencyCode: alert.currencyCode)). Checked when you refresh prices in the app or scenario dashboard."))
             } else if let message = alerts.statusMessage {
                 StatusRow(message: message)
+            } else {
+                StatusRow(message: .info("Local alerts are checked when app prices refresh. They do not monitor prices continuously in the background."))
             }
 
             if alerts.alert(for: calculation.symbol)?.isEnabled == true {
                 Button(role: .destructive) {
                     alerts.disable(symbol: calculation.symbol)
                 } label: {
-                    LiquidGlassActionIcon(icon: .alertOff, tint: .red, size: 44)
+                    LiquidGlassActionIcon(icon: .alertOff, tint: LiquidPalette.danger, size: 44)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
@@ -1244,7 +1636,7 @@ struct ContentView: View {
     private var invalidState: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 9) {
-                LiquidGlassIcon(icon: .warning, tint: .orange, size: 34)
+                LiquidGlassIcon(icon: .warning, tint: LiquidPalette.muted, size: 34)
 
                 Text("Check inputs")
                     .font(.headline)
@@ -1260,7 +1652,7 @@ struct ContentView: View {
 
     private var widgetStatus: some View {
         HStack(spacing: 12) {
-            LiquidGlassIcon(icon: .widget, tint: LiquidPalette.blue, size: 38)
+            LiquidGlassIcon(icon: .widget, tint: LiquidPalette.accent, size: 38)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Home Screen widget")
@@ -1394,6 +1786,32 @@ struct ContentView: View {
         }
     }
 
+    private func openAssetLookup() {
+        selectDockAction(.asset)
+        shouldFocusAssetLookup = true
+        activeSheet = .assetLookup
+        focusAssetLookupField()
+    }
+
+    private func selectDockAction(_ action: DockAction) {
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.78)) {
+            selectedDockAction = action
+        }
+    }
+
+    private func focusAssetLookupField() {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard activeSheet == .assetLookup else { return }
+            assetLookupFieldFocused = true
+        }
+    }
+
+    private func selectFirstSuggestedAsset() {
+        guard let asset = lookup.suggestions.first else { return }
+        select(asset)
+    }
+
     private func select(_ asset: MarketAsset) {
         lookup.prepareSelection(asset)
         assetQuery = asset.symbol
@@ -1471,6 +1889,34 @@ struct ContentView: View {
     }
 
     private func saveScenario(_ calculation: BuybackCalculation) {
+        let scenario = makeScenario(calculation)
+        scenarios.save(scenario)
+        WidgetCenter.shared.reloadAllTimelines()
+        scenarioMessage = .info("Scenario saved.")
+    }
+
+    private func freezeCurrentScenario(_ calculation: BuybackCalculation) {
+        let scenario = makeScenario(
+            calculation,
+            trackingState: .frozen,
+            frozenSellPrice: calculation.sellPrice,
+            frozenCurrencyCode: calculation.currencyCode,
+            frozenAt: .now,
+            frozenQuoteTimestamp: lookup.quote?.timestamp
+        )
+        scenarios.save(scenario)
+        WidgetCenter.shared.reloadAllTimelines()
+        scenarioMessage = .info("\(calculation.displaySymbol) frozen at \(calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode)).")
+    }
+
+    private func makeScenario(
+        _ calculation: BuybackCalculation,
+        trackingState: ScenarioTrackingState = .watching,
+        frozenSellPrice: Double? = nil,
+        frozenCurrencyCode: String? = nil,
+        frozenAt: Date? = nil,
+        frozenQuoteTimestamp: Date? = nil
+    ) -> SavedBuybackScenario {
         let scenario = SavedBuybackScenario(
             id: UUID(),
             name: displayName,
@@ -1483,6 +1929,7 @@ struct ContentView: View {
             sellPrice: calculation.sellPrice,
             gainPercent: calculation.gainAtSellPercent,
             sharesToSell: calculation.sharesToSell,
+            averageCostBasis: calculation.averageCostBasis,
             taxProfile: calculation.taxProfile,
             taxRatePercent: calculation.taxRatePercent,
             taxCurrencyCode: calculation.taxCurrencyCode,
@@ -1492,16 +1939,18 @@ struct ContentView: View {
             buyFeeTotal: calculation.buyFeeTotal,
             slippagePercent: calculation.slippagePercent,
             taxLotsEnabled: taxLotsEnabled,
-            taxLots: taxLots
+            taxLots: taxLots,
+            trackingState: trackingState,
+            frozenSellPrice: frozenSellPrice,
+            frozenCurrencyCode: frozenCurrencyCode,
+            frozenAt: frozenAt,
+            frozenQuoteTimestamp: frozenQuoteTimestamp
         )
-
-        scenarios.save(scenario)
-        WidgetCenter.shared.reloadAllTimelines()
-        scenarioMessage = .info("Scenario saved.")
+        return scenario
     }
 
     private func loadScenario(_ scenario: SavedBuybackScenario) {
-        sellPriceText = scenario.sellPrice.inputString
+        sellPriceText = (scenario.activeSellPrice(using: scenarioQuotes[scenario.id]) ?? scenario.sellPrice).inputString
         gainPercentText = scenario.gainPercent.inputString
         sharesText = scenario.sharesToSell.inputString
         taxProfileRaw = scenario.taxProfile.rawValue
@@ -1514,7 +1963,7 @@ struct ContentView: View {
         slippageText = scenario.slippagePercent.inputString
         taxLotsEnabled = scenario.taxLotsEnabled
         applyTaxLots(scenario.taxLots)
-        manualPriceEnabled = scenario.manualPriceEnabled
+        manualPriceEnabled = scenario.manualPriceEnabled || scenario.isFrozen
 
         if let asset = scenario.selectedAsset {
             lookup.prepareSelection(asset)
@@ -1534,6 +1983,112 @@ struct ContentView: View {
         }
 
         scenarioMessage = .info("Scenario loaded.")
+    }
+
+    private func refreshScenarioQuotes() {
+        guard !isRefreshingScenarios else { return }
+        let savedScenarios = scenarios.scenarios
+        guard !savedScenarios.isEmpty else { return }
+
+        isRefreshingScenarios = true
+        scenarioRefreshingIDs = Set(savedScenarios.map(\.id))
+        scenarioMessage = .info("Refreshing saved scenario prices.")
+
+        Task { @MainActor in
+            guard let client = MarketDataClientFactory.make(
+                finnhubAPIKey: apiKeys.effectiveFinnhubAPIKey,
+                openFIGIAPIKey: apiKeys.effectiveOpenFIGIAPIKey,
+                includeSavedKeys: true
+            ) else {
+                savedScenarios.forEach { scenario in
+                    scenarioMessages[scenario.id] = .warning("Using saved price. Add a Finnhub key for live scenario refresh.")
+                }
+                scenarioRefreshingIDs.removeAll()
+                isRefreshingScenarios = false
+                scenarioMessage = .warning("Live scenario refresh needs a Finnhub API key.")
+                return
+            }
+
+            for scenario in savedScenarios {
+                await refreshScenarioQuote(scenario, client: client)
+            }
+
+            scenarioRefreshingIDs.removeAll()
+            isRefreshingScenarios = false
+            scenarioMessage = .info("Scenario prices refreshed.")
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+    }
+
+    private func refreshScenarioQuote(_ scenario: SavedBuybackScenario, client: CompositeMarketDataClient) async {
+        scenarioMessages[scenario.id] = nil
+
+        do {
+            let quote = try await client.quote(for: scenario.portfolioAsset)
+            scenarioQuotes[scenario.id] = quote
+            scenarioMessages[scenario.id] = quote.isStale
+                ? .warning(quote.statusMessage ?? "Live price is stale; verify before trading.")
+                : .info("Live price updated.")
+
+            if let calculation = scenario.calculation(using: quote) {
+                alerts.evaluate(symbol: calculation.symbol, price: quote.price, calculation: calculation)
+            }
+        } catch {
+            scenarioQuotes.removeValue(forKey: scenario.id)
+            scenarioMessages[scenario.id] = .warning("Using saved price. \(marketDataMessage(for: error))")
+        }
+
+        scenarioRefreshingIDs.remove(scenario.id)
+    }
+
+    private func openFreezeEditor(_ scenario: SavedBuybackScenario) {
+        let quote = scenarioQuotes[scenario.id]
+        let seedPrice = quote?.price ?? scenario.frozenSellPrice ?? scenario.sellPrice
+        freezeEditorScenario = scenario
+        freezePriceText = seedPrice.inputString
+        freezeCurrencyCode = (quote?.currencyCode ?? scenario.frozenCurrencyCode ?? scenario.currencyCode).normalizedCurrencyCode
+        freezeQuoteTimestamp = quote?.timestamp
+        activeSheet = .freezeEditor
+    }
+
+    private func confirmFreezeEditor() {
+        guard let scenario = freezeEditorScenario else {
+            scenarioMessage = .warning("Choose a saved scenario to freeze.")
+            return
+        }
+        guard let price = BuybackCalculator.parseDecimal(freezePriceText),
+              price.isFinite,
+              price > 0
+        else {
+            scenarioMessage = .warning("Enter a valid frozen sell price.")
+            return
+        }
+
+        guard SavedScenarioStorage.freezeScenario(
+            id: scenario.id,
+            sellPrice: price,
+            currencyCode: freezeCurrencyCode,
+            quoteTimestamp: freezeQuoteTimestamp
+        ) else {
+            scenarioMessage = .warning("Could not freeze \(scenario.displaySymbol).")
+            return
+        }
+
+        scenarios.reload()
+        WidgetCenter.shared.reloadAllTimelines()
+        scenarioMessage = .info("\(scenario.displaySymbol) frozen at \(price.moneyString(currencyCode: freezeCurrencyCode)).")
+        activeSheet = nil
+    }
+
+    private func unfreezeScenario(_ scenario: SavedBuybackScenario) {
+        guard SavedScenarioStorage.unfreezeScenario(id: scenario.id) else {
+            scenarioMessage = .warning("Could not unfreeze \(scenario.displaySymbol).")
+            return
+        }
+
+        scenarios.reload()
+        WidgetCenter.shared.reloadAllTimelines()
+        scenarioMessage = .info("\(scenario.displaySymbol) is watching live prices again.")
     }
 
     private func handleDeepLink(_ url: URL) {
@@ -1592,25 +2147,65 @@ struct ContentView: View {
         scenarioMessage = .info("Loaded widget values.")
     }
 
-    private func taxLot(sharesText: String, basisText: String) -> TaxLot? {
-        guard let shares = BuybackCalculator.parseDecimal(sharesText),
-              let basis = BuybackCalculator.parseDecimal(basisText)
-        else {
-            return nil
+    private func marketDataMessage(for error: Error) -> String {
+        if let marketDataError = error as? MarketDataError {
+            return marketDataError.localizedDescription
         }
-
-        let lot = TaxLot(shares: shares, averageCostBasis: basis)
-        return lot.isValid ? lot : nil
+        return "Market-data request failed."
     }
 
     private func applyTaxLots(_ lots: [TaxLot]) {
-        let lotValues = Array(lots.prefix(3))
-        lot1SharesText = lotValues.indices.contains(0) ? lotValues[0].shares.inputString : ""
-        lot1BasisText = lotValues.indices.contains(0) ? lotValues[0].averageCostBasis.inputString : ""
-        lot2SharesText = lotValues.indices.contains(1) ? lotValues[1].shares.inputString : ""
-        lot2BasisText = lotValues.indices.contains(1) ? lotValues[1].averageCostBasis.inputString : ""
-        lot3SharesText = lotValues.indices.contains(2) ? lotValues[2].shares.inputString : ""
-        lot3BasisText = lotValues.indices.contains(2) ? lotValues[2].averageCostBasis.inputString : ""
+        editableTaxLots = lots.isEmpty ? [EditableTaxLot()] : lots.map(EditableTaxLot.init(lot:))
+        persistTaxLots()
+    }
+
+    private func restoreTaxLotsIfNeeded() {
+        guard !taxLotsRestored else { return }
+        taxLotsRestored = true
+
+        let savedLots = TaxLotDraftStorage.decode(taxLotsData)
+        if !savedLots.isEmpty {
+            editableTaxLots = savedLots.map(EditableTaxLot.init(lot:))
+            return
+        }
+
+        let legacyLots = TaxLotDraftStorage.legacyLots(
+            lot1Shares: lot1SharesText,
+            lot1Basis: lot1BasisText,
+            lot2Shares: lot2SharesText,
+            lot2Basis: lot2BasisText,
+            lot3Shares: lot3SharesText,
+            lot3Basis: lot3BasisText
+        )
+
+        editableTaxLots = legacyLots.isEmpty ? [EditableTaxLot()] : legacyLots.map(EditableTaxLot.init(lot:))
+        if !legacyLots.isEmpty {
+            taxLotsData = TaxLotDraftStorage.encode(legacyLots)
+        }
+    }
+
+    private func persistTaxLots() {
+        guard taxLotsRestored else { return }
+        taxLotsData = TaxLotDraftStorage.encode(taxLots)
+    }
+
+    private func ensureEditableTaxLotRow() {
+        if editableTaxLots.isEmpty {
+            editableTaxLots = [EditableTaxLot()]
+        }
+    }
+
+    private func addTaxLotRow() {
+        editableTaxLots.append(EditableTaxLot())
+    }
+
+    private func removeTaxLotRow(id: UUID) {
+        editableTaxLots.removeAll { $0.id == id }
+        ensureEditableTaxLotRow()
+    }
+
+    private func taxLotIndex(for id: UUID) -> Int {
+        editableTaxLots.firstIndex { $0.id == id } ?? 0
     }
 
     private func evaluateAlert(_ calculation: BuybackCalculation) {
@@ -1760,6 +2355,35 @@ private struct LaunchDecimalField: View {
     }
 }
 
+private struct EditableTaxLot: Identifiable, Equatable {
+    var id: UUID
+    var sharesText: String
+    var basisText: String
+
+    init(id: UUID = UUID(), sharesText: String = "", basisText: String = "") {
+        self.id = id
+        self.sharesText = sharesText
+        self.basisText = basisText
+    }
+
+    init(lot: TaxLot) {
+        id = lot.id
+        sharesText = lot.shares.inputString
+        basisText = lot.averageCostBasis.inputString
+    }
+
+    var taxLot: TaxLot? {
+        guard let shares = BuybackCalculator.parseDecimal(sharesText),
+              let basis = BuybackCalculator.parseDecimal(basisText)
+        else {
+            return nil
+        }
+
+        let lot = TaxLot(id: id, shares: shares, averageCostBasis: basis)
+        return lot.isValid ? lot : nil
+    }
+}
+
 private enum CalculatorField: Hashable {
     case asset
     case price
@@ -1772,6 +2396,8 @@ private enum CalculatorField: Hashable {
     case sellFee
     case buyFee
     case slippage
+    case lotShares
+    case lotBasis
     case lot1Shares
     case lot1Basis
     case lot2Shares
@@ -1781,6 +2407,144 @@ private enum CalculatorField: Hashable {
     case alertPrice
     case finnhubKey
     case openFIGIKey
+}
+
+private extension BuybackIconKind {
+    var systemSymbolName: String {
+        switch self {
+        case .appMark:
+            return "arrow.trianglehead.2.clockwise.rotate.90"
+        case .settings:
+            return "gearshape.fill"
+        case .keySettings, .key, .apiKey:
+            return "key.fill"
+        case .refresh:
+            return "arrow.clockwise"
+        case .asset, .lookupText, .market:
+            return "magnifyingglass"
+        case .live:
+            return "dot.radiowaves.left.and.right"
+        case .save:
+            return "square.and.arrow.down"
+        case .clear:
+            return "xmark"
+        case .calculator:
+            return "apps.iphone"
+        case .edit:
+            return "pencil"
+        case .taxProfile, .tax, .taxRate:
+            return "percent"
+        case .taxCurrency, .cash, .buybackCash:
+            return "dollarsign"
+        case .lots:
+            return "list.bullet.rectangle"
+        case .sliders:
+            return "slider.horizontal.3"
+        case .price, .limit:
+            return "tag.fill"
+        case .percent:
+            return "percent"
+        case .shares:
+            return "square.stack.3d.up.fill"
+        case .fx:
+            return "arrow.left.arrow.right"
+        case .target, .selected:
+            return "target"
+        case .slippage, .drop:
+            return "arrow.down.right"
+        case .sellFee, .buyFee, .costs:
+            return "creditcard.fill"
+        case .basis:
+            return "chart.bar.xaxis"
+        case .sensitivity:
+            return "chart.line.uptrend.xyaxis"
+        case .scenarios, .bookmark:
+            return "rectangle.stack.fill"
+        case .alert, .alertArmed:
+            return "bell.badge.fill"
+        case .alertOff:
+            return "bell.slash.fill"
+        case .widget:
+            return "rectangle.grid.2x2.fill"
+        case .toggleOff:
+            return "circle"
+        case .warning:
+            return "exclamationmark.triangle.fill"
+        case .info:
+            return "info.circle.fill"
+        case .chevron:
+            return "chevron.down"
+        }
+    }
+}
+
+private struct TopChromeBlurBackground: View {
+    let progress: Double
+
+    var body: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .overlay {
+                LinearGradient(
+                    colors: [
+                        LiquidPalette.glassTint.opacity(0.050 * progress),
+                        Color(uiColor: .systemBackground).opacity(0.16 * progress),
+                        Color.clear
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .opacity(progress)
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black.opacity(0.94), location: 0.62),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct NativeGlassIconButton: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    let symbol: String
+    let tint: Color
+    let accessibilityLabel: String
+    var size: CGFloat = 52
+    var isSelected = false
+    var isDisabled = false
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            guard !isDisabled else { return }
+            action()
+        } label: {
+            ZStack {
+                Image(systemName: symbol)
+                    .font(.system(size: size * 0.36, weight: .semibold))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(.white.opacity(isDisabled ? 0.58 : 0.96))
+                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.18), radius: 1.2, y: 0.8)
+            }
+            .frame(width: size, height: size)
+            .contentShape(Circle())
+            .scaleEffect(isSelected ? 1.018 : 1.0)
+        }
+        .buttonStyle(.glass(.regular.tint(LiquidPalette.glassTint.opacity(reduceTransparency ? 0.15 : 0.096)).interactive()))
+        .tint(LiquidPalette.accent)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(isDisabled ? "Unavailable" : (isSelected ? "Selected" : ""))
+    }
 }
 
 private struct SensitivityRow: Identifiable {
@@ -1801,7 +2565,7 @@ private struct SavedScenarioRow: View {
         HStack(alignment: .center, spacing: 12) {
             Button(action: onLoad) {
                 HStack(alignment: .center, spacing: 12) {
-                    LiquidGlassIcon(icon: .bookmark, tint: LiquidPalette.blue, size: 34)
+                    LiquidGlassIcon(icon: .bookmark, tint: LiquidPalette.accent, size: 34)
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(scenario.displayTitle)
@@ -1821,14 +2585,14 @@ private struct SavedScenarioRow: View {
             .buttonStyle(.plain)
 
             Button(role: .destructive, action: onDelete) {
-                LiquidGlassActionIcon(icon: .clear, tint: .red, size: 38)
+                LiquidGlassActionIcon(icon: .clear, tint: LiquidPalette.danger, size: 38)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Delete saved scenario")
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
-        .liquidCardBackground(tint: LiquidPalette.blue.opacity(0.18))
+        .liquidCardBackground(tint: LiquidPalette.accent.opacity(0.18))
     }
 
     private var subtitle: String {
@@ -1841,12 +2605,190 @@ private struct SavedScenarioRow: View {
     }
 }
 
+private struct ScenarioComparisonRow: View {
+    let scenario: SavedBuybackScenario
+    let quote: MarketQuote?
+    let calculation: BuybackCalculation?
+    let alert: PriceAlert?
+    let message: LookupMessage?
+    let isRefreshing: Bool
+    let onLoad: () -> Void
+    let onFreeze: () -> Void
+    let onEditFreeze: () -> Void
+    let onUnfreeze: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                LiquidGlassIcon(icon: statusIcon, tint: statusTint, size: 34)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(scenario.displayTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                if isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+
+            if let calculation {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    comparisonMetric("State", value: stateText, icon: statusIcon)
+                    if scenario.isFrozen {
+                        comparisonMetric("Frozen", value: calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode), icon: .bookmark)
+                        comparisonMetric("Now", value: currentPriceText, icon: .market)
+                    } else {
+                        comparisonMetric("Price", value: calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode), icon: .price)
+                    }
+                    comparisonMetric("Limit", value: calculation.maximumBuybackPrice.moneyString(currencyCode: calculation.currencyCode), icon: .limit)
+                    comparisonMetric("Drop", value: calculation.requiredDropPercent.compactPercentString, icon: .drop)
+                    comparisonMetric("Alert", value: alertText, icon: alert?.isEnabled == true ? .alertArmed : .alert)
+                }
+            } else {
+                StatusRow(message: .warning("Check saved scenario inputs."))
+            }
+
+            if let message {
+                StatusRow(message: message)
+            }
+
+            HStack(spacing: 10) {
+                if scenario.isFrozen {
+                    Button(action: onEditFreeze) {
+                        LiquidGlassActionIcon(icon: .edit, tint: LiquidPalette.muted, size: 38)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Edit frozen sell price")
+
+                    Button(action: onUnfreeze) {
+                        LiquidGlassActionIcon(icon: .toggleOff, tint: .secondary, size: 38)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Unfreeze scenario")
+                } else {
+                    Button(action: onFreeze) {
+                        LiquidGlassActionIcon(icon: .bookmark, tint: LiquidPalette.muted, size: 38)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Freeze scenario")
+                }
+
+                Button(action: onLoad) {
+                    LiquidGlassActionIcon(icon: .selected, size: 38)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Load saved scenario")
+
+                Button(role: .destructive, action: onDelete) {
+                    LiquidGlassActionIcon(icon: .clear, tint: LiquidPalette.danger, size: 38)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Delete saved scenario")
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .liquidCardBackground(tint: LiquidPalette.accent.opacity(0.18))
+    }
+
+    private var subtitle: String {
+        let savedDate = scenario.savedAt.formatted(date: .abbreviated, time: .shortened)
+        let status = quote == nil ? "saved price" : "live price"
+        return "\(scenario.displaySymbol) - \(stateText.lowercased()) - \(status) - saved \(savedDate)"
+    }
+
+    private var stateText: String {
+        scenario.isBuybackReady(using: quote) ? "Ready" : scenario.trackingState.label
+    }
+
+    private var statusIcon: BuybackIconKind {
+        if scenario.isBuybackReady(using: quote) {
+            return .selected
+        }
+
+        if scenario.isFrozen {
+            return .bookmark
+        }
+
+        return quote == nil ? .bookmark : .live
+    }
+
+    private var statusTint: Color {
+        if scenario.isBuybackReady(using: quote) {
+            return LiquidPalette.accent
+        }
+
+        if scenario.isFrozen {
+            return LiquidPalette.muted
+        }
+
+        return quote == nil ? LiquidPalette.accent : LiquidPalette.accent
+    }
+
+    private var currentPriceText: String {
+        guard let price = scenario.currentMarketPrice(using: quote) else {
+            return "-"
+        }
+
+        let currencyCode = quote?.currencyCode ?? scenario.currencyCode
+        return price.moneyString(currencyCode: currencyCode)
+    }
+
+    private var alertText: String {
+        guard let alert, alert.isEnabled else {
+            return "Off"
+        }
+
+        return alert.targetPrice.moneyString(currencyCode: alert.currencyCode)
+    }
+
+    private func comparisonMetric(_ title: String, value: String, icon: BuybackIconKind) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            BuybackIcon(icon, tint: LiquidPalette.accent)
+                .frame(width: 16, height: 16)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .lineLimit(1)
+
+                Text(value)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .liquidCapsuleSurface(tint: LiquidPalette.accent.opacity(0.55))
+    }
+}
+
 private struct AssetSuggestionRow: View {
     let asset: MarketAsset
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            LiquidGlassIcon(icon: .market, tint: LiquidPalette.blue, size: 34)
+            LiquidGlassIcon(icon: .market, tint: LiquidPalette.accent, size: 34)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(asset.name.nilIfBlank ?? asset.symbol)
@@ -1871,7 +2813,7 @@ private struct AssetSuggestionRow: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
-        .liquidCardBackground(tint: LiquidPalette.blue.opacity(0.22))
+        .liquidCardBackground(tint: LiquidPalette.accent.opacity(0.22))
     }
 }
 
@@ -1912,7 +2854,7 @@ private struct QuoteStatusRow: View {
 
     var body: some View {
         HStack(spacing: 9) {
-            BuybackIcon(manualPriceEnabled ? .edit : .live, tint: manualPriceEnabled ? Color.orange : Color.accentColor)
+            BuybackIcon(manualPriceEnabled ? .edit : .live, tint: manualPriceEnabled ? LiquidPalette.muted : LiquidPalette.accent)
                 .frame(width: 18, height: 18)
 
             Text(statusText)
@@ -1923,7 +2865,7 @@ private struct QuoteStatusRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .liquidCapsuleSurface(tint: manualPriceEnabled ? .orange : LiquidPalette.accent)
+        .liquidCapsuleSurface(tint: manualPriceEnabled ? LiquidPalette.muted : LiquidPalette.accent)
     }
 
     private var statusText: String {
@@ -1942,7 +2884,7 @@ private struct StatusRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
-            BuybackIcon(message.style == .warning ? .warning : .info, tint: message.style == .warning ? .orange : .secondary)
+            BuybackIcon(message.style == .warning ? .warning : .info, tint: message.style == .warning ? LiquidPalette.muted : .secondary)
                 .frame(width: 18, height: 18)
                 .padding(.top, 1)
 
@@ -1953,7 +2895,7 @@ private struct StatusRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .liquidCapsuleSurface(tint: message.style == .warning ? .orange : LiquidPalette.blue)
+        .liquidCapsuleSurface(tint: message.style == .warning ? LiquidPalette.muted : LiquidPalette.accent)
     }
 }
 

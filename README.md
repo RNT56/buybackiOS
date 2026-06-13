@@ -1,38 +1,120 @@
-# BuybackCalculator
+# Buyback Calculator
 
-An iOS 26+ SwiftUI app and WidgetKit extension for stock buy-back planning with asset lookup, live quote autofill, manual fallback pricing, tax-aware calculations, saved scenarios, price alerts, and an iPad split layout.
+<p align="center">
+  <strong>Know the price where selling today and buying back later still works.</strong>
+</p>
 
-## Features
+<p align="center">
+  Buyback Calculator is a local-first iOS 26+ planning app for investors who want to model taxes, fees, FX, tax lots, live prices, saved scenarios, widgets, and alerts before a sell-and-rebuy decision turns into guesswork.
+</p>
 
-- Asset lookup by name, ticker, ISIN, or WKN with Finnhub quotes and OpenFIGI identifier fallback
-- Manual price override when live pricing is unavailable or intentionally bypassed
-- Tax profiles for Germany, US long-term, US short-term, and custom tax rates
-- Optional tax currency and FX conversion for reporting tax in a different currency
-- Gain-driven basis or multi-lot weighted average basis with up to three editable tax lots
-- Sell fees, buy fees, slippage buffer, and extra-share target controls
-- Price sensitivity table that preserves the current cost basis while modeling price moves
-- Saved scenarios that preserve asset, pricing, tax profile, FX, fees, slippage, and tax-lot inputs
-- Price alerts stored on device and checked when a selected asset quote refreshes
-- Regular-width iPad split layout with inputs on the left and results on the right
-- Configurable Home Screen widget with live quote refresh, fallback price, tax profile, FX, fees, and deep links into the app
+<p align="center">
+  <a href="#the-pain-point">Pain Point</a> ·
+  <a href="#the-solution">Solution</a> ·
+  <a href="#what-users-get">User Value</a> ·
+  <a href="#product-tour">Product Tour</a> ·
+  <a href="#local-first-trust-model">Trust Model</a> ·
+  <a href="#developer-setup">Developer Setup</a>
+</p>
 
-## What It Calculates
+---
 
-Given:
+## The Pain Point
 
-- Current or fallback sell price per share
-- Either a gain percentage or weighted tax-lot cost basis
-- Shares to sell
-- Tax profile, tax currency, and FX rate to the tax currency
-- Optional sell fees, buy fees, and slippage buffer
+Selling a winning position looks simple until the real trade math starts.
 
-Defaults:
+A user may know the stock price, the gain, and the number of shares they want to sell. What they often do not know is the price at which buying back later would actually improve the position after tax, fees, slippage, currency conversion, and their desired extra-share target.
 
-- Germany tax profile at 27%
-- Target to buy back at least 2.5% more shares than before selling
-- No trading fees, no slippage, and 1.0 FX rate
+That uncertainty creates a practical problem:
 
-Formula:
+| The user asks | Why it is hard in a normal spreadsheet |
+| --- | --- |
+| "If I sell now, how low does the stock need to drop before buying back makes sense?" | Taxes, fees, and target share count all move the answer. |
+| "What if my cost basis comes from several tax lots?" | Weighted basis math is easy to get wrong and painful to update. |
+| "What if I want to track multiple sell scenarios?" | Saved state, live prices, fallback prices, and alert targets drift apart. |
+| "Can I trust the number when the market-data API fails?" | Most tools hide failure states or silently reuse stale prices. |
+| "Will the app watch prices continuously?" | Local iOS apps cannot honestly promise server-style background monitoring. |
+
+The result is hesitation. Users either overfit a spreadsheet, ignore tax drag, or make the trade with a vague pullback target.
+
+## The Solution
+
+Buyback Calculator turns the sell-and-rebuy decision into a focused, local, transparent workflow.
+
+It starts from the question that matters most:
+
+> At what buy-back price would I recover my post-tax cash, cover costs, account for slippage, and own more shares than before?
+
+The app keeps the calculator as the primary screen, then layers in the tools needed around that decision:
+
+| Need | Product answer |
+| --- | --- |
+| Fast modeling | A clean calculator built around current price, gain, shares, tax profile, fees, slippage, and target extra shares. |
+| Realistic tax basis | Dynamic weighted tax lots with add/delete controls and migration from older fixed-lot inputs. |
+| Confidence in the result | A readable calculation trace from proceeds through tax and final maximum buy-back price. |
+| Multiple outcomes | Saved scenario comparison with live quote refresh, fallback pricing, alert status, and readiness state. |
+| Local honesty | Alerts are local and checked on app price refresh; widgets display alert state but do not claim to trigger notifications. |
+| Privacy | Runtime API keys are validated and stored in the shared iOS Keychain access group, not in plaintext defaults. |
+
+## What Users Get
+
+### A clear buy-back limit
+
+The headline number is the maximum price the user can pay to buy back while still hitting the target. It is not just a pullback percentage. It reflects taxes, FX, fees, slippage, and target shares.
+
+### A decision users can audit
+
+The breakdown sheet shows the calculation in plain steps: gross proceeds, sell fees, taxable gain, tax, after-tax cash, buy fees, slippage, target share count, and final buy-back limit.
+
+### Scenario comparison without spreadsheet drift
+
+Users can save scenarios, refresh all prices, compare readiness, and see whether each position is still watching, frozen, or ready to buy back. If live quotes fail, the app falls back to saved prices and says so.
+
+### Tax lots that match real portfolios
+
+Instead of a fixed three-row editor, users can add as many tax lots as needed. The calculation continues to use weighted-average basis, keeping the behavior understandable while allowing more realistic input.
+
+### Alerts with honest behavior
+
+Local alerts can be armed at the calculated buy-back limit or a custom price. They are evaluated when the app refreshes prices, including scenario-dashboard refreshes. The copy makes clear that the app is not running a continuous server-side monitor.
+
+### Widgets that stay useful
+
+The Home Screen widget can show a single buy-back calculation or a saved portfolio view. It uses live quote refresh when available, fallback prices when necessary, deep links back into the app, and freeze actions for sell-price tracking.
+
+## Product Tour
+
+### 1. Select an asset
+
+Search by company name, ticker, ISIN, or WKN. The app uses Finnhub for symbol search and quotes, with OpenFIGI as a best-effort identifier mapping fallback.
+
+### 2. Enter the sell model
+
+Start with price, gain, shares, tax profile, currency, FX, fees, slippage, and target extra shares. Users who know their exact lots can enable tax lots and let the app derive the weighted cost basis.
+
+### 3. Read the result
+
+The main card shows the buy-back limit and required pullback. The detailed breakdown explains how the result was derived, step by step.
+
+### 4. Save and compare scenarios
+
+Saved scenarios preserve the asset, price basis, tax assumptions, FX, fees, slippage, and lots. The comparison dashboard shows symbol, live or fallback price, limit, required drop, tax estimate, after-tax cash, alert target, alert state, and refresh status.
+
+### 5. Freeze after selling
+
+When a user sells, they can freeze the sell price so the buy-back limit remains anchored to the executed trade. Live prices then track whether the current market is at or below the frozen buy-back limit.
+
+### 6. Arm local alerts
+
+Alerts are stored in the shared app group and evaluated locally during app refreshes. Repeated notifications are throttled for six hours per symbol.
+
+### 7. Keep the number visible
+
+Widgets bring the calculation and portfolio readiness state to the Home Screen. They display armed alert targets and status without overstating what a widget can do in the background.
+
+## Calculation Model
+
+The calculator answers one core question: after selling, paying tax and costs, and reserving for slippage, what is the highest buy-back price that still reaches the desired share count?
 
 ```text
 costBasis = sellPrice / (1 + gainPercent / 100)
@@ -49,49 +131,91 @@ targetShareCount = sharesToSell * (1 + targetExtraSharesPercent / 100)
 maximumBuybackPrice = cashAvailableForBuyback / targetShareCount / (1 + slippagePercent / 100)
 ```
 
-The advanced section controls manual pricing, tax profile, custom tax rate, tax currency, FX rate, shares, target extra shares, fees, slippage, and tax lots. When tax lots are enabled, the gain field is disabled and the calculator derives gain from the weighted basis.
+Default assumptions:
 
-## Market Data
+| Assumption | Default |
+| --- | --- |
+| Tax profile | Germany |
+| Tax rate | 27% |
+| Target extra shares | 2.5% |
+| Sell fee | 0 |
+| Buy fee | 0 |
+| Slippage | 0 |
+| FX rate | 1.0 |
 
-The app uses:
+Supported tax profiles include Germany, US long-term, US short-term, and Custom. The app includes assumption notes so users can understand what each profile means before relying on the number.
 
-- Finnhub for autocomplete and current quotes
-- OpenFIGI as a best-effort fallback for ISIN and WKN mapping
+## Local-First Trust Model
 
-You can add keys directly in the app under `Settings`. App-entered keys are stored in a shared iOS Keychain access group so the app and widget can use the same runtime keys. Runtime keys are preferred over bundled build settings.
+Buyback Calculator is designed to be useful even when market data is unavailable.
 
-For build-time bundled keys, create a local config file:
+| Area | Behavior |
+| --- | --- |
+| User inputs | Stored locally with app storage or app-group storage where sharing with widgets is required. |
+| API keys | Validated before use and stored in the shared iOS Keychain access group. |
+| Runtime key priority | Shared Keychain key, then bundled build key, then manual or fallback pricing. |
+| Market data | Finnhub quotes with OpenFIGI identifier fallback for ISIN/WKN mapping. |
+| Quote failures | Surfaced to the user; saved fallback prices remain available. |
+| Alerts | Local notifications only, evaluated when app refreshes prices. |
+| Widgets | Display calculations, fallback status, frozen states, and armed alert targets. |
+| Backend | No backend or server-push alert service in this release. |
+
+This keeps the app honest: it improves the user's decision without pretending to provide continuous server-side monitoring.
+
+## Feature Map
+
+| Feature | User value |
+| --- | --- |
+| Liquid Glass SwiftUI interface | A focused iOS 26+ experience with clean cards, native glass controls, and polished navigation chrome. |
+| Locale-aware numeric parsing | Users can paste values with currency symbols, grouping separators, spaces, comma decimals, or dot decimals. |
+| Dynamic tax lots | More realistic portfolio modeling without forcing users into a fixed three-row structure. |
+| Calculation trace | Every major number can be inspected from proceeds to final buy-back limit. |
+| Scenario comparison | Users can compare multiple saved decisions instead of rebuilding them manually. |
+| Refresh All | Saved scenarios can refresh market prices together while keeping fallback clarity. |
+| Freeze workflow | Executed sell prices stay fixed while live quotes track buy-back readiness. |
+| Local alerts | Practical local reminders that are explicit about refresh-based evaluation. |
+| Widget support | Home Screen visibility for a single calculator or a portfolio-style scenario list. |
+| API-key management | Runtime keys are accepted, validated, stored securely, and shared with the widget through Keychain entitlements. |
+
+## Market Data And API Keys
+
+The app can run entirely with manual prices, but live data improves the workflow.
+
+Providers:
+
+- Finnhub: symbol autocomplete and quotes
+- OpenFIGI: optional ISIN and WKN mapping fallback
+
+Users can add keys in app settings. App-entered keys are validated and stored in the shared iOS Keychain access group so the app and widget can use the same runtime credentials.
+
+For local development with bundled keys, create a private config file:
 
 ```sh
 cp Config/Secrets.xcconfig.example Config/Secrets.xcconfig
 ```
 
-Then add at least:
+Then add:
 
 ```text
 FINNHUB_API_KEY = your_finnhub_key
+OPENFIGI_API_KEY = your_openfigi_key_optional
 ```
 
-`OPENFIGI_API_KEY` is optional; unauthenticated OpenFIGI requests work with lower rate limits. `Config/Secrets.xcconfig` is ignored by git. If no Finnhub key is available, the app and widget still work with manual/fallback prices.
+`Config/Secrets.xcconfig` is ignored by git. If no Finnhub key is available, the app and widget continue to work with manual or saved fallback prices.
 
-Runtime key priority:
+## Developer Setup
 
-1. Shared Keychain key saved in the app
-2. Bundled `Config/Secrets.xcconfig` key
-3. Manual/fallback pricing
+The Xcode project is generated from `project.yml`.
 
-## Project
+Targets:
 
-The Xcode project is generated from `project.yml`:
+| Target | Purpose |
+| --- | --- |
+| `BuybackCalculator` | Main iOS app |
+| `BuybackWidgetExtension` | WidgetKit extension |
+| `BuybackCalculatorTests` | Unit tests for calculation, storage, parsing, alerts, keys, and shared scenario logic |
 
-- App target: `BuybackCalculator`
-- Widget extension target: `BuybackWidgetExtension`
-- Unit test target: `BuybackCalculatorTests`
-- Minimum deployment target: iOS 26.0
-- Shared calculation and market data sources: `Shared/`
-- Shared runtime API keys use `keychain-access-groups` entitlements generated from `project.yml`
-
-Regenerate the project after changing target membership, build settings, or Info.plist properties:
+Regenerate the project after changing target membership, build settings, entitlements, or Info.plist properties:
 
 ```sh
 xcodegen generate
@@ -115,20 +239,28 @@ xcodebuild -project BuybackCalculator.xcodeproj \
   test
 ```
 
-## How To Use The Widget
+## Widget Usage
+
+Single-stock calculator widget:
 
 1. Build and install the app.
-2. Add the `Buy-Back Calculator` widget to your Home Screen.
-3. Long-press the widget.
-4. Tap `Edit Widget`.
-5. Enter:
-   - Stock Symbol
-   - Gain %
-   - Fallback Price
-   - Optional tax profile, tax rate, tax currency, FX rate, extra-share target, sell fees, buy fees, and slippage
+2. Add the `Buy-Back Calculator` widget to the Home Screen.
+3. Long-press the widget and choose `Edit Widget`.
+4. Enter symbol, gain, fallback price, and optional tax or fee settings.
+5. Tap the widget to open the matching app calculation.
 
-The widget tries to fetch a live quote on its timeline refresh and falls back to the configured price when the API key, network, rate limit, or quote is unavailable. Tapping the widget opens the app for the configured symbol and carries supported widget inputs through the app deep link.
+Portfolio widget:
 
-## Price Alerts
+1. Save scenarios in the app.
+2. Add the `Buy-Back Portfolio` widget.
+3. Use live quote refresh where available and fallback prices where needed.
+4. Freeze a row after selling to keep the executed sell price fixed.
+5. Open the app to edit the frozen sell price to the exact broker fill.
 
-Alerts are stored locally in the app. Use the `Price alert` section to arm an alert at the calculated buy-back limit or a custom price. Alerts are evaluated when a selected asset quote is fetched or refreshed; if the current price is at or below the target, the app schedules a local notification. Repeated triggers are throttled for six hours per symbol.
+## Roadmap
+
+Server-side alerts are intentionally out of scope for this local-first release. The future backend path is documented in [`docs/ROADMAP.md`](docs/ROADMAP.md), including APNs registration, quote polling, provider fallback, alert rules, privacy, API-key handling, and migration from local-only alerts.
+
+## Important Note
+
+Buyback Calculator is a planning tool, not financial, investment, or tax advice. Tax rules vary by jurisdiction and user situation. Users should verify assumptions against their broker statements, tax reports, and professional guidance before trading.

@@ -7,11 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		032CF32CD75BC993C36662FE /* TaxLotStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9848B2762C463E08859A1D1 /* TaxLotStorage.swift */; };
 		0A99E46343CEDF3211128FBD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6785E099B7FF142D3008D84C /* SwiftUI.framework */; };
-		0F3D64E7B18C4FA9A22E1201 /* SavedScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68EC6D3188088D7B7FFF4391 /* SavedScenarios.swift */; };
-		0F3D64E7B18C4FA9A22E1202 /* SavedScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68EC6D3188088D7B7FFF4391 /* SavedScenarios.swift */; };
+		298D7AE0452E2E2F19940BE1 /* PriceAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B93CB7EA77B87BC2BEE302 /* PriceAlerts.swift */; };
+		2A21A02094697AB412B75DCB /* TaxLotStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9848B2762C463E08859A1D1 /* TaxLotStorage.swift */; };
 		38E7D79E640338E356CA3296 /* APIKeySettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE29427837444F02BDFC7FFA /* APIKeySettingsViewModel.swift */; };
 		3BB32F0E8FA62A882E54C5C1 /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5A636E75E34C9E3E2B0888B /* UserNotifications.framework */; };
+		3E112E381A0E562DD4ECC304 /* SavedScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D45C6F28C150CAD669E70B25 /* SavedScenarios.swift */; };
 		4B7F0D6ACA90354527CFC923 /* BuybackCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */; };
 		4FAFA4E7CD8A75579BFCC719 /* MarketData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E643154B019D90FC0941E9C1 /* MarketData.swift */; };
 		524F16A4D3C227E234E190B0 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFABE4509A82FB113137375D /* Security.framework */; };
@@ -20,22 +22,30 @@
 		55DAF44977E6329DB96E9E9C /* BuybackIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB486946B7711FABD5279F8D /* BuybackIcons.swift */; };
 		5A390E8B67991CD5698F05D8 /* LiquidDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189BA55F9DAF4FC8AD7562F9 /* LiquidDesignSystem.swift */; };
 		5AACF05A06300C00A45E5E28 /* PriceAlertStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 701524F1034E4196D6D88E62 /* PriceAlertStore.swift */; };
+		5FE51FB0300B8821CED57094 /* SavedScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D45C6F28C150CAD669E70B25 /* SavedScenarios.swift */; };
+		63F34690F53D3B8F40B8F442 /* PriceAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B93CB7EA77B87BC2BEE302 /* PriceAlerts.swift */; };
 		6544D8267A015C0494F21F2D /* BuybackWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB028776A73BE604AEAAC97D /* BuybackWidgetBundle.swift */; };
+		77A7A4F985E8DB8F980A0C4B /* PriceAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B93CB7EA77B87BC2BEE302 /* PriceAlerts.swift */; };
 		7E178733C94072F6DE80E2C3 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C61C47619D047D304308EDAC /* AppIntents.framework */; };
 		848D1E54C82A645B489A2116 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 534D387D11194BB2A7445011 /* ContentView.swift */; };
 		84C61354184B6590A0069E04 /* BuybackWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF47E5B51DDBE7E768F383C8 /* BuybackWidget.swift */; };
+		84D8E25A94830B5CFB299572 /* SharedFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B419EF6DA3762D57E2726E69 /* SharedFeatureTests.swift */; };
 		8930030788DD2D1A976ED011 /* MarketLookupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F8E8B6BB7E95AA7B677FA7 /* MarketLookupViewModel.swift */; };
 		8FBBB367F886BF37CF65921D /* MarketData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E643154B019D90FC0941E9C1 /* MarketData.swift */; };
+		9634AEF99449D8BA11924FB5 /* ScenarioPortfolio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 338DA2898C5A6F28EB6AF347 /* ScenarioPortfolio.swift */; };
 		9C43BB2052E8F8063FC23868 /* MarketDataDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C73DBB82C05FB182807F6319 /* MarketDataDecodingTests.swift */; };
 		9E29383603E54BF2D3E55179 /* BuybackCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */; };
 		A485769F798E7E5921624D23 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 018DC9398D8BC71964C4E26F /* WidgetKit.framework */; };
 		A531D215B745200951AE3E39 /* APIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */; };
+		A7939346CAACB1A661B9B1A1 /* ScenarioPortfolio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 338DA2898C5A6F28EB6AF347 /* ScenarioPortfolio.swift */; };
+		AD6CBC53B97D8C76E710A35D /* TaxLotStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9848B2762C463E08859A1D1 /* TaxLotStorage.swift */; };
+		AF010B514AE956062830BF61 /* ScenarioPortfolio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 338DA2898C5A6F28EB6AF347 /* ScenarioPortfolio.swift */; };
+		B30C80F95587D517B7CD6F5A /* SavedScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D45C6F28C150CAD669E70B25 /* SavedScenarios.swift */; };
 		BF2DEDB6FC4A147CF4C7E56D /* BuybackCalculationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BBAC552BCC1BEBE64ECE84 /* BuybackCalculationTests.swift */; };
 		C072F65DB9B4A68359591F4A /* BuybackIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB486946B7711FABD5279F8D /* BuybackIcons.swift */; };
 		CDFA8BD27BB5E2CD6E69A0EB /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0977B432A10A098ADAE37C /* XCTest.framework */; };
 		CFC04F61CC36C451FF237949 /* BuybackCalculatorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D69F740B5DAE7D338D5F43ED /* BuybackCalculatorApp.swift */; };
 		D2E6D365418EAF098E7A1D8F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFABE4509A82FB113137375D /* Security.framework */; };
-		D612706C64EED2309AF7D74B /* SavedScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68EC6D3188088D7B7FFF4391 /* SavedScenarios.swift */; };
 		D6ACAC800AC6B87321695503 /* APIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC1733EDB4C1E487EFF191E /* APIKeyStore.swift */; };
 		D9B15564FAD34DCCE402C7FC /* BuybackWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C9A76E0F6F0282BB7918DABD /* BuybackWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DAE5A6CFA8552024FF0F219A /* BuybackCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */; };
@@ -73,14 +83,15 @@
 		189BA55F9DAF4FC8AD7562F9 /* LiquidDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidDesignSystem.swift; sourceTree = "<group>"; };
 		18BBAC552BCC1BEBE64ECE84 /* BuybackCalculationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackCalculationTests.swift; sourceTree = "<group>"; };
 		230F0FF232DC32042FCA664D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		338DA2898C5A6F28EB6AF347 /* ScenarioPortfolio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioPortfolio.swift; sourceTree = "<group>"; };
 		486C443C56801C9AC87C1704 /* BuybackCalculatorTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BuybackCalculatorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		48F8E8B6BB7E95AA7B677FA7 /* MarketLookupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketLookupViewModel.swift; sourceTree = "<group>"; };
 		4FE1E79C7C2503D3DE6D566E /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		4FE9ED321E3130F4B6F12393 /* BuybackWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BuybackWidgetExtension.entitlements; sourceTree = "<group>"; };
+		52B93CB7EA77B87BC2BEE302 /* PriceAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriceAlerts.swift; sourceTree = "<group>"; };
 		534D387D11194BB2A7445011 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		65362EB1BCE655483C5C644A /* BuybackCalculator.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BuybackCalculator.entitlements; sourceTree = "<group>"; };
 		6785E099B7FF142D3008D84C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
-		68EC6D3188088D7B7FFF4391 /* SavedScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedScenarios.swift; sourceTree = "<group>"; };
 		701524F1034E4196D6D88E62 /* PriceAlertStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriceAlertStore.swift; sourceTree = "<group>"; };
 		7B5A18387FBCDCE5D53C80DA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		986F0FFCBDD4FA1E16581E9F /* BuybackCalculator.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BuybackCalculator.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -88,10 +99,13 @@
 		AA0977B432A10A098ADAE37C /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		AC1276D19EC214963E9DAFA9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		AFABE4509A82FB113137375D /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		B419EF6DA3762D57E2726E69 /* SharedFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedFeatureTests.swift; sourceTree = "<group>"; };
+		B9848B2762C463E08859A1D1 /* TaxLotStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaxLotStorage.swift; sourceTree = "<group>"; };
 		C61C47619D047D304308EDAC /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
 		C73DBB82C05FB182807F6319 /* MarketDataDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketDataDecodingTests.swift; sourceTree = "<group>"; };
 		C9A76E0F6F0282BB7918DABD /* BuybackWidgetExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = BuybackWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		CB028776A73BE604AEAAC97D /* BuybackWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackWidgetBundle.swift; sourceTree = "<group>"; };
+		D45C6F28C150CAD669E70B25 /* SavedScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedScenarios.swift; sourceTree = "<group>"; };
 		D69F740B5DAE7D338D5F43ED /* BuybackCalculatorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackCalculatorApp.swift; sourceTree = "<group>"; };
 		E643154B019D90FC0941E9C1 /* MarketData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketData.swift; sourceTree = "<group>"; };
 		EB486946B7711FABD5279F8D /* BuybackIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuybackIcons.swift; sourceTree = "<group>"; };
@@ -152,6 +166,7 @@
 			children = (
 				18BBAC552BCC1BEBE64ECE84 /* BuybackCalculationTests.swift */,
 				C73DBB82C05FB182807F6319 /* MarketDataDecodingTests.swift */,
+				B419EF6DA3762D57E2726E69 /* SharedFeatureTests.swift */,
 			);
 			path = BuybackCalculatorTests;
 			sourceTree = "<group>";
@@ -195,7 +210,10 @@
 				F62D20A54ACA7D0F00500021 /* BuybackCalculator.swift */,
 				EB486946B7711FABD5279F8D /* BuybackIcons.swift */,
 				E643154B019D90FC0941E9C1 /* MarketData.swift */,
-				68EC6D3188088D7B7FFF4391 /* SavedScenarios.swift */,
+				52B93CB7EA77B87BC2BEE302 /* PriceAlerts.swift */,
+				D45C6F28C150CAD669E70B25 /* SavedScenarios.swift */,
+				338DA2898C5A6F28EB6AF347 /* ScenarioPortfolio.swift */,
+				B9848B2762C463E08859A1D1 /* TaxLotStorage.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -295,6 +313,15 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					6CF4127D30D503055EA03F77 = {
+						DevelopmentTeam = WLDMWQ963U;
+					};
+					984F91BF989CAD0430C0EA01 = {
+						DevelopmentTeam = WLDMWQ963U;
+					};
+					B8B87B9C0B460779B0126C25 = {
+						DevelopmentTeam = WLDMWQ963U;
+					};
 				};
 			};
 			buildConfigurationList = BB64B443DE3ED6AA79F7898E /* Build configuration list for PBXProject "BuybackCalculator" */;
@@ -344,7 +371,10 @@
 				4FAFA4E7CD8A75579BFCC719 /* MarketData.swift in Sources */,
 				8930030788DD2D1A976ED011 /* MarketLookupViewModel.swift in Sources */,
 				5AACF05A06300C00A45E5E28 /* PriceAlertStore.swift in Sources */,
-				D612706C64EED2309AF7D74B /* SavedScenarios.swift in Sources */,
+				63F34690F53D3B8F40B8F442 /* PriceAlerts.swift in Sources */,
+				5FE51FB0300B8821CED57094 /* SavedScenarios.swift in Sources */,
+				A7939346CAACB1A661B9B1A1 /* ScenarioPortfolio.swift in Sources */,
+				032CF32CD75BC993C36662FE /* TaxLotStorage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -358,7 +388,11 @@
 				C072F65DB9B4A68359591F4A /* BuybackIcons.swift in Sources */,
 				E8903FCD09A680C72C15796D /* MarketData.swift in Sources */,
 				9C43BB2052E8F8063FC23868 /* MarketDataDecodingTests.swift in Sources */,
-				0F3D64E7B18C4FA9A22E1202 /* SavedScenarios.swift in Sources */,
+				77A7A4F985E8DB8F980A0C4B /* PriceAlerts.swift in Sources */,
+				3E112E381A0E562DD4ECC304 /* SavedScenarios.swift in Sources */,
+				9634AEF99449D8BA11924FB5 /* ScenarioPortfolio.swift in Sources */,
+				84D8E25A94830B5CFB299572 /* SharedFeatureTests.swift in Sources */,
+				AD6CBC53B97D8C76E710A35D /* TaxLotStorage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -372,7 +406,10 @@
 				84C61354184B6590A0069E04 /* BuybackWidget.swift in Sources */,
 				6544D8267A015C0494F21F2D /* BuybackWidgetBundle.swift in Sources */,
 				8FBBB367F886BF37CF65921D /* MarketData.swift in Sources */,
-				0F3D64E7B18C4FA9A22E1201 /* SavedScenarios.swift in Sources */,
+				298D7AE0452E2E2F19940BE1 /* PriceAlerts.swift in Sources */,
+				B30C80F95587D517B7CD6F5A /* SavedScenarios.swift in Sources */,
+				AF010B514AE956062830BF61 /* ScenarioPortfolio.swift in Sources */,
+				2A21A02094697AB412B75DCB /* TaxLotStorage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -483,6 +520,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = WLDMWQ963U;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -609,6 +647,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = WLDMWQ963U;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

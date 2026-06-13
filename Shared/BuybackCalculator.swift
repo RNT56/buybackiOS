@@ -34,6 +34,32 @@ enum TaxProfile: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var assumptionSummary: String {
+        switch self {
+        case .germany:
+            return "Uses a flat 27% German capital-gains estimate."
+        case .usLongTerm:
+            return "Uses a simple 15% US long-term capital-gains estimate."
+        case .usShortTerm:
+            return "Uses a simple 24% US short-term ordinary-income estimate."
+        case .custom:
+            return "Uses the custom tax rate you enter."
+        }
+    }
+
+    var assumptionDetails: String {
+        switch self {
+        case .germany:
+            return "This is a planning estimate and does not model allowances, church tax, loss offsets, broker withholding, or tax-year-specific rules."
+        case .usLongTerm:
+            return "This does not model income brackets, state or local taxes, net investment income tax, wash-sale rules, or loss offsets."
+        case .usShortTerm:
+            return "This does not model actual marginal brackets, state or local taxes, net investment income tax, wash-sale rules, or loss offsets."
+        case .custom:
+            return "Use this when your actual tax situation differs from the built-in estimates. The calculator applies the entered rate to taxable gains only."
+        }
+    }
+
     func resolvedTaxRatePercent(customRatePercent: Double) -> Double {
         self == .custom ? customRatePercent : defaultTaxRatePercent
     }
@@ -376,13 +402,99 @@ enum BuybackCalculator {
     }
 
     static func parseDecimal(_ text: String) -> Double? {
-        let normalized = text
+        let trimmed = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: ",", with: ".")
+            .replacingOccurrences(of: "\u{00a0}", with: " ")
 
-        guard !normalized.isEmpty else { return nil }
-        return Double(normalized)
+        guard !trimmed.isEmpty else { return nil }
+
+        for locale in [Locale.current, BuybackFormat.locale, Locale(identifier: "de_DE")] {
+            if let value = decimalFormatter(locale: locale).number(from: trimmed)?.doubleValue,
+               value.isFinite {
+                return value
+            }
+
+            if let value = currencyFormatter(locale: locale).number(from: trimmed)?.doubleValue,
+               value.isFinite {
+                return value
+            }
+        }
+
+        let filtered = trimmed
+            .unicodeScalars
+            .compactMap { scalar -> Character? in
+                switch scalar {
+                case "0"..."9", ".", ",", "-", "+":
+                    return Character(scalar)
+                default:
+                    return nil
+                }
+            }
+
+        guard filtered.contains(where: { $0.isNumber }) else { return nil }
+
+        var sign = ""
+        var body = String(filtered)
+        if body.contains("-") {
+            sign = "-"
+        } else if body.contains("+") {
+            sign = "+"
+        }
+        body.removeAll { $0 == "-" || $0 == "+" }
+
+        let separatorIndices = body.indices.filter { body[$0] == "." || body[$0] == "," }
+        let decimalSeparatorIndex: String.Index?
+        if let lastDot = body.lastIndex(of: "."),
+           let lastComma = body.lastIndex(of: ",") {
+            decimalSeparatorIndex = lastDot > lastComma ? lastDot : lastComma
+        } else if separatorIndices.count == 1,
+                  let onlySeparator = separatorIndices.first {
+            let digitsBefore = body[..<onlySeparator].filter(\.isNumber).count
+            let digitsAfter = body[body.index(after: onlySeparator)...].filter(\.isNumber).count
+            let localeDecimalSeparator = Locale.current.decimalSeparator ?? "."
+            let separator = String(body[onlySeparator])
+            if digitsAfter == 0 {
+                decimalSeparatorIndex = nil
+            } else if digitsAfter == 3, digitsBefore <= 3, separator != localeDecimalSeparator {
+                decimalSeparatorIndex = nil
+            } else {
+                decimalSeparatorIndex = onlySeparator
+            }
+        } else {
+            decimalSeparatorIndex = nil
+        }
+
+        var normalized = sign
+        for index in body.indices {
+            let character = body[index]
+            if character.isNumber {
+                normalized.append(character)
+            } else if index == decimalSeparatorIndex {
+                normalized.append(".")
+            }
+        }
+
+        guard normalized != "-", normalized != "+", normalized != ".", !normalized.isEmpty else {
+            return nil
+        }
+
+        return Double(normalized).flatMap { $0.isFinite ? $0 : nil }
+    }
+
+    private static func decimalFormatter(locale: Locale) -> NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.locale = locale
+        formatter.numberStyle = .decimal
+        formatter.isLenient = true
+        return formatter
+    }
+
+    private static func currencyFormatter(locale: Locale) -> NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.locale = locale
+        formatter.numberStyle = .currency
+        formatter.isLenient = true
+        return formatter
     }
 
     static func validationMessage(inputs: BuybackInputs) -> String? {

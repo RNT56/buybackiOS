@@ -415,16 +415,7 @@ enum MarketDataClientFactory {
     }
 
     static func sanitizedAPIKey(_ value: String?) -> String? {
-        guard let value else {
-            return nil
-        }
-
-        let trimmed = value.trimmedForDisplay
-        guard !trimmed.isEmpty, !trimmed.hasPrefix("$(") else {
-            return nil
-        }
-
-        return trimmed
+        APIKeyValidator.sanitizedAPIKey(value)
     }
 }
 

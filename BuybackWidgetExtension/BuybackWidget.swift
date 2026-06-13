@@ -65,6 +65,78 @@ struct BuybackPortfolioWidgetConfiguration: WidgetConfigurationIntent {
     static let description = IntentDescription("Display saved assets with live prices and calculated buy-back limits.")
 }
 
+private enum FreezeScenarioIntentError: Error, LocalizedError {
+    case invalidInput
+    case scenarioNotFound
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidInput:
+            return "The scenario could not be frozen because the widget price is invalid."
+        case .scenarioNotFound:
+            return "The saved scenario no longer exists."
+        }
+    }
+}
+
+struct FreezeScenarioIntent: AppIntent {
+    static let title: LocalizedStringResource = "Freeze Sell Price"
+    static let description = IntentDescription("Freeze a saved scenario at the widget's latest displayed quote.")
+
+    @Parameter(title: "Scenario ID")
+    var scenarioID: String
+
+    @Parameter(title: "Sell Price")
+    var sellPrice: Double
+
+    @Parameter(title: "Currency")
+    var currencyCode: String
+
+    @Parameter(title: "Quote Time")
+    var quoteUnixTime: Double
+
+    init() {
+        scenarioID = ""
+        sellPrice = 0
+        currencyCode = BuybackCalculator.defaultCurrencyCode
+        quoteUnixTime = 0
+    }
+
+    init(
+        scenarioID: String,
+        sellPrice: Double,
+        currencyCode: String,
+        quoteUnixTime: Double
+    ) {
+        self.scenarioID = scenarioID
+        self.sellPrice = sellPrice
+        self.currencyCode = currencyCode
+        self.quoteUnixTime = quoteUnixTime
+    }
+
+    func perform() async throws -> some IntentResult {
+        guard let id = UUID(uuidString: scenarioID),
+              sellPrice.isFinite,
+              sellPrice > 0
+        else {
+            throw FreezeScenarioIntentError.invalidInput
+        }
+
+        let quoteTimestamp = quoteUnixTime > 0 ? Date(timeIntervalSince1970: quoteUnixTime) : nil
+        guard SavedScenarioStorage.freezeScenario(
+            id: id,
+            sellPrice: sellPrice,
+            currencyCode: currencyCode,
+            quoteTimestamp: quoteTimestamp
+        ) else {
+            throw FreezeScenarioIntentError.scenarioNotFound
+        }
+
+        WidgetCenter.shared.reloadTimelines(ofKind: BuybackWidgetKind.portfolio)
+        return .result()
+    }
+}
+
 struct BuybackEntry: TimelineEntry, Sendable {
     let date: Date
     let query: String
@@ -75,6 +147,7 @@ struct BuybackEntry: TimelineEntry, Sendable {
     let fallbackSellPrice: Double
     let quote: MarketQuote?
     let priceStatus: WidgetPriceStatus
+    let alert: PriceAlert?
     let calculation: BuybackCalculation?
 }
 
@@ -92,7 +165,13 @@ struct BuybackPortfolioRow: Identifiable, Equatable {
     let assetExchange: String?
     let quote: MarketQuote?
     let priceStatus: WidgetPriceStatus
+    let alert: PriceAlert?
     let calculation: BuybackCalculation?
+    let trackingState: ScenarioTrackingState
+    let frozenSellPrice: Double?
+    let currentMarketPrice: Double?
+    let activeSellPrice: Double?
+    let isBuybackReady: Bool
 }
 
 enum WidgetPriceStatus: Equatable, Sendable {
@@ -175,9 +254,9 @@ private struct WidgetGlassSurface: ViewModifier {
             .background {
                 let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
                 shape
-                    .fill(tint.opacity(renderingMode == .fullColor ? fillOpacity : min(fillOpacity, 0.06)))
+                    .fill(WidgetTint.glass.opacity(renderingMode == .fullColor ? fillOpacity : min(fillOpacity, 0.06)))
                     .glassEffect(
-                        .regular.tint(tint.opacity(renderingMode == .fullColor ? glassTintOpacity : 0.035)),
+                        .regular.tint(WidgetTint.glass.opacity(renderingMode == .fullColor ? glassTintOpacity : 0.035)),
                         in: shape
                     )
                     .overlay {
@@ -185,6 +264,12 @@ private struct WidgetGlassSurface: ViewModifier {
                     }
             }
     }
+}
+
+private enum WidgetTint {
+    static let accent = Color(red: 0.05, green: 0.43, blue: 0.48)
+    static let glass = Color(red: 0.25, green: 0.50, blue: 0.54)
+    static let muted = Color(red: 0.43, green: 0.48, blue: 0.54)
 }
 
 private extension View {
@@ -313,6 +398,7 @@ struct BuybackProvider: AppIntentTimelineProvider {
             fallbackSellPrice: configuration.fallbackSellPrice,
             quote: quote,
             priceStatus: .live,
+            alert: alert(for: asset.symbol),
             calculation: calculation
         )
     }
@@ -351,8 +437,15 @@ struct BuybackProvider: AppIntentTimelineProvider {
             fallbackSellPrice: configuration.fallbackSellPrice,
             quote: nil,
             priceStatus: .fallback(reason),
+            alert: alert(for: fallbackAsset.symbol),
             calculation: calculation
         )
+    }
+
+    private func alert(for symbol: String) -> PriceAlert? {
+        PriceAlertStorage.load().first {
+            $0.symbol == symbol.normalizedStockSymbol && $0.isEnabled
+        }
     }
 
     private func resolveAsset(
@@ -456,9 +549,10 @@ struct BuybackPortfolioProvider: AppIntentTimelineProvider {
         }
 
         let client = MarketDataClientFactory.make()
+        let alerts = PriceAlertStorage.load()
         var rows: [BuybackPortfolioRow] = []
         for scenario in savedScenarios.prefix(maxRows(for: context.family)) {
-            rows.append(await makeRow(for: scenario, client: client))
+            rows.append(await makeRow(for: scenario, client: client, alerts: alerts))
         }
 
         return BuybackPortfolioEntry(date: date, rows: rows, hasSavedScenarios: true)
@@ -466,7 +560,8 @@ struct BuybackPortfolioProvider: AppIntentTimelineProvider {
 
     private func makeRow(
         for scenario: SavedBuybackScenario,
-        client: CompositeMarketDataClient?
+        client: CompositeMarketDataClient?,
+        alerts: [PriceAlert]
     ) async -> BuybackPortfolioRow {
         let asset = scenario.portfolioAsset
         let quote: MarketQuote?
@@ -485,6 +580,8 @@ struct BuybackPortfolioProvider: AppIntentTimelineProvider {
             priceStatus = .fallback("Missing key")
         }
 
+        let calculation = scenario.calculation(using: quote)
+
         return BuybackPortfolioRow(
             id: scenario.id,
             title: scenario.displayTitle,
@@ -493,7 +590,13 @@ struct BuybackPortfolioProvider: AppIntentTimelineProvider {
             assetExchange: scenario.selectedAsset?.exchange.trimmedForDisplay.nilIfEmpty,
             quote: quote,
             priceStatus: priceStatus,
-            calculation: scenario.portfolioCalculation(using: quote)
+            alert: alerts.first { $0.symbol == scenario.displaySymbol && $0.isEnabled },
+            calculation: calculation,
+            trackingState: scenario.trackingState,
+            frozenSellPrice: scenario.frozenSellPrice,
+            currentMarketPrice: scenario.currentMarketPrice(using: quote),
+            activeSellPrice: scenario.activeSellPrice(using: quote),
+            isBuybackReady: scenario.isBuybackReady(using: quote)
         )
     }
 
@@ -526,64 +629,6 @@ struct BuybackPortfolioProvider: AppIntentTimelineProvider {
             }
         }
         return "Saved price"
-    }
-}
-
-private extension SavedBuybackScenario {
-    var portfolioAsset: MarketAsset {
-        if let selectedAsset {
-            return selectedAsset
-        }
-
-        return MarketAsset(
-            symbol: displaySymbol,
-            name: displayTitle,
-            currencyCode: currencyCode,
-            source: .finnhub
-        )
-    }
-
-    func portfolioCalculation(using quote: MarketQuote?) -> BuybackCalculation? {
-        let currentPrice = quote?.price ?? sellPrice
-        let currentCurrencyCode = quote?.currencyCode ?? currencyCode
-
-        if taxLotsEnabled,
-           let lotAverageCostBasis = TaxLot.weightedAverageCostBasis(taxLots) {
-            let lotShares = TaxLot.totalShares(taxLots)
-            guard lotShares > 0 else { return nil }
-
-            return BuybackCalculator.calculate(
-                symbol: displaySymbol,
-                sharesToSell: lotShares,
-                averageCostBasis: lotAverageCostBasis,
-                sellPrice: currentPrice,
-                taxProfile: taxProfile,
-                taxRatePercent: taxRatePercent,
-                taxCurrencyCode: taxCurrencyCode,
-                fxRateToTaxCurrency: fxRateToTaxCurrency,
-                targetExtraSharesPercent: targetExtraSharesPercent,
-                sellFeeTotal: sellFeeTotal,
-                buyFeeTotal: buyFeeTotal,
-                slippagePercent: slippagePercent,
-                currencyCode: currentCurrencyCode
-            )
-        }
-
-        return BuybackCalculator.calculate(
-            symbol: displaySymbol,
-            sellPrice: currentPrice,
-            gainAtSellPercent: gainPercent,
-            sharesToSell: sharesToSell,
-            taxProfile: taxProfile,
-            taxRatePercent: taxRatePercent,
-            taxCurrencyCode: taxCurrencyCode,
-            fxRateToTaxCurrency: fxRateToTaxCurrency,
-            targetExtraSharesPercent: targetExtraSharesPercent,
-            sellFeeTotal: sellFeeTotal,
-            buyFeeTotal: buyFeeTotal,
-            slippagePercent: slippagePercent,
-            currencyCode: currentCurrencyCode
-        )
     }
 }
 
@@ -671,7 +716,7 @@ struct BuybackWidgetEntryView: View {
 
             HStack(spacing: 7) {
                 CompactMetric(title: "Price", value: calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode))
-                CompactMetric(title: "Drop", value: calculation.requiredDropPercent.compactPercentString)
+                CompactMetric(title: compactStatusTitle, value: compactStatusValue)
             }
         }
     }
@@ -701,9 +746,9 @@ struct BuybackWidgetEntryView: View {
             }
 
             VStack(spacing: 8) {
-                MetricTile(title: "Price", value: calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode), icon: .price, tint: .blue)
-                MetricTile(title: "Gain", value: calculation.gainAtSellPercent.compactPercentString, icon: .percent, tint: .indigo)
-                MetricTile(title: entry.priceStatus.label, value: statusValue, icon: entry.priceStatus.icon, tint: statusTint)
+                MetricTile(title: "Price", value: calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode), icon: .price, tint: WidgetTint.accent)
+                MetricTile(title: "Gain", value: calculation.gainAtSellPercent.compactPercentString, icon: .percent, tint: WidgetTint.accent)
+                MetricTile(title: statusTileTitle, value: statusTileValue, icon: statusTileIcon, tint: statusTileTint)
             }
             .frame(width: 114)
         }
@@ -729,7 +774,7 @@ struct BuybackWidgetEntryView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .widgetGlassSurface(
-                tint: .teal,
+                tint: WidgetTint.accent,
                 radius: WidgetMetrics.surfaceRadius(for: family),
                 fillOpacity: 0.075,
                 glassTintOpacity: 0.12,
@@ -740,21 +785,51 @@ struct BuybackWidgetEntryView: View {
 
             Grid(alignment: .leading, horizontalSpacing: 9, verticalSpacing: 9) {
                 GridRow {
-                    MetricTile(title: "Price", value: calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode), icon: .price, tint: .blue)
-                    MetricTile(title: "Gain", value: calculation.gainAtSellPercent.compactPercentString, icon: .percent, tint: .indigo)
+                    MetricTile(title: "Price", value: calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode), icon: .price, tint: WidgetTint.accent)
+                    MetricTile(title: "Gain", value: calculation.gainAtSellPercent.compactPercentString, icon: .percent, tint: WidgetTint.accent)
                 }
 
                 GridRow {
-                    MetricTile(title: "Basis", value: calculation.averageCostBasis.moneyString(currencyCode: calculation.currencyCode), icon: .basis, tint: .green)
-                    MetricTile(title: "Drop", value: calculation.requiredDropPercent.compactPercentString, icon: .drop, tint: .orange)
+                    MetricTile(title: "Basis", value: calculation.averageCostBasis.moneyString(currencyCode: calculation.currencyCode), icon: .basis, tint: WidgetTint.accent)
+                    MetricTile(title: "Drop", value: calculation.requiredDropPercent.compactPercentString, icon: .drop, tint: WidgetTint.muted)
                 }
 
                 GridRow {
-                    MetricTile(title: "Tax", value: calculation.taxAmount.moneyString(currencyCode: calculation.currencyCode), icon: .tax, tint: .mint)
-                    MetricTile(title: entry.priceStatus.label, value: statusValue, icon: entry.priceStatus.icon, tint: statusTint)
+                    MetricTile(title: "Tax", value: calculation.taxAmount.moneyString(currencyCode: calculation.currencyCode), icon: .tax, tint: WidgetTint.accent)
+                    MetricTile(title: statusTileTitle, value: statusTileValue, icon: statusTileIcon, tint: statusTileTint)
                 }
             }
         }
+    }
+
+    private var compactStatusTitle: String {
+        entry.alert?.isEnabled == true ? "Alert" : "Drop"
+    }
+
+    private var compactStatusValue: String {
+        if let alert = entry.alert, alert.isEnabled {
+            return alert.targetPrice.moneyString(currencyCode: alert.currencyCode)
+        }
+        return entry.calculation?.requiredDropPercent.compactPercentString ?? "-"
+    }
+
+    private var statusTileTitle: String {
+        entry.alert?.isEnabled == true ? "Alert" : entry.priceStatus.label
+    }
+
+    private var statusTileValue: String {
+        if let alert = entry.alert, alert.isEnabled {
+            return alert.targetPrice.moneyString(currencyCode: alert.currencyCode)
+        }
+        return statusValue
+    }
+
+    private var statusTileIcon: BuybackIconKind {
+        entry.alert?.isEnabled == true ? .alertArmed : entry.priceStatus.icon
+    }
+
+    private var statusTileTint: Color {
+        entry.alert?.isEnabled == true ? WidgetTint.muted : statusTint
     }
 
     private var statusValue: String {
@@ -769,15 +844,15 @@ struct BuybackWidgetEntryView: View {
     private var statusTint: Color {
         switch entry.priceStatus {
         case .live:
-            return .teal
+            return WidgetTint.accent
         case .fallback:
-            return .orange
+            return WidgetTint.muted
         }
     }
 
     private var invalidView: some View {
         VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 12) {
-            BuybackIcon(.warning, tint: .orange)
+            BuybackIcon(.warning, tint: WidgetTint.muted)
                 .frame(width: family == .systemSmall ? 24 : 30, height: family == .systemSmall ? 24 : 30)
                 .widgetAccentable()
 
@@ -833,7 +908,7 @@ struct BuybackPortfolioWidgetEntryView: View {
 
     private var emptyView: some View {
         VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 11) {
-            LiquidWidgetIcon(icon: .widget, tint: .teal, size: family == .systemSmall ? 30 : 36)
+            LiquidWidgetIcon(icon: .widget, tint: WidgetTint.accent, size: family == .systemSmall ? 30 : 36)
 
             Text("Save assets")
                 .font(family == .systemSmall ? .headline.weight(.bold) : .title3.weight(.bold))
@@ -891,7 +966,7 @@ private struct PortfolioWidgetHeader: View {
 
     var body: some View {
         HStack(spacing: 9) {
-            LiquidWidgetIcon(icon: .asset, tint: .teal, size: family == .systemSmall ? 27 : 31)
+            LiquidWidgetIcon(icon: .asset, tint: WidgetTint.accent, size: family == .systemSmall ? 27 : 31)
 
             VStack(alignment: .leading, spacing: 0) {
                 Text("Portfolio")
@@ -918,11 +993,21 @@ private struct PortfolioWidgetHeader: View {
     }
 
     private var statusText: String {
+        let readyCount = entry.rows.filter(\.isBuybackReady).count
         let liveCount = entry.rows.filter { $0.priceStatus == .live }.count
-        guard liveCount > 0 else {
-            return "Saved prices"
+        let frozenCount = entry.rows.filter { $0.trackingState == .frozen }.count
+        let alertCount = entry.rows.filter { $0.alert?.isEnabled == true }.count
+        if readyCount > 0 {
+            return "\(readyCount) ready / \(entry.rows.count)"
         }
-        return "\(liveCount) live / \(entry.rows.count)"
+        if frozenCount > 0 {
+            return "\(frozenCount) frozen / \(entry.rows.count)"
+        }
+        guard liveCount > 0 else {
+            return alertCount > 0 ? "Saved prices / \(alertCount) alerts" : "Saved prices"
+        }
+        let liveText = "\(liveCount) live / \(entry.rows.count)"
+        return alertCount > 0 ? "\(liveText) / \(alertCount) alerts" : liveText
     }
 }
 
@@ -934,24 +1019,32 @@ private struct PortfolioAssetRow: View {
     let compact: Bool
 
     private var tint: Color {
+        if row.isBuybackReady {
+            return WidgetTint.accent
+        }
+
+        if row.trackingState == .frozen {
+            return WidgetTint.muted
+        }
+
         switch row.priceStatus {
         case .live:
-            return renderingMode == .fullColor ? .teal : .primary
+            return WidgetTint.accent
         case .fallback:
-            return renderingMode == .fullColor ? .orange : .primary
+            return WidgetTint.muted
         }
     }
 
     var body: some View {
         HStack(spacing: compact ? 7 : 9) {
-            BuybackIcon(row.priceStatus.icon, tint: tint)
+            BuybackIcon(rowIcon, tint: tint)
                 .frame(width: compact ? 17 : 19, height: compact ? 17 : 19)
                 .widgetAccentable()
                 .frame(width: compact ? 27 : 31, height: compact ? 27 : 31)
                 .background {
                     Circle()
-                        .fill(tint.opacity(renderingMode == .fullColor ? 0.12 : 0.06))
-                        .glassEffect(.regular.tint(tint.opacity(0.12)), in: Circle())
+                        .fill(WidgetTint.glass.opacity(renderingMode == .fullColor ? 0.065 : 0.045))
+                        .glassEffect(.regular.tint(WidgetTint.glass.opacity(0.085)), in: Circle())
                 }
 
             VStack(alignment: .leading, spacing: compact ? 0 : 1) {
@@ -971,6 +1064,22 @@ private struct PortfolioAssetRow: View {
 
             Spacer(minLength: 4)
 
+            if let freezeIntent {
+                Button(intent: freezeIntent) {
+                    BuybackIcon(.bookmark, tint: renderingMode == .fullColor ? WidgetTint.muted : .primary)
+                        .frame(width: compact ? 15 : 17, height: compact ? 15 : 17)
+                        .widgetAccentable()
+                        .frame(width: compact ? 27 : 30, height: compact ? 27 : 30)
+                        .background {
+                            Circle()
+                                .fill(WidgetTint.glass.opacity(renderingMode == .fullColor ? 0.065 : 0.045))
+                                .glassEffect(.regular.tint(WidgetTint.glass.opacity(0.085)), in: Circle())
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Freeze \(row.symbol)")
+            }
+
             if let calculation = row.calculation {
                 VStack(alignment: .trailing, spacing: compact ? 0 : 1) {
                     Text(calculation.maximumBuybackPrice.moneyString(currencyCode: calculation.currencyCode))
@@ -979,7 +1088,7 @@ private struct PortfolioAssetRow: View {
                         .minimumScaleFactor(compact ? 0.54 : 0.62)
                         .widgetAccentable()
 
-                    Text(calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode))
+                    Text(secondaryValue(for: calculation))
                         .font(.caption2.monospacedDigit().weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -988,7 +1097,7 @@ private struct PortfolioAssetRow: View {
             } else {
                 Text("Check")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
         }
@@ -1000,6 +1109,35 @@ private struct PortfolioAssetRow: View {
             fillOpacity: renderingMode == .fullColor ? 0.085 : 0.052,
             glassTintOpacity: renderingMode == .fullColor ? 0.10 : 0.035,
             strokeOpacity: renderingMode == .fullColor ? 0.12 : 0.08
+        )
+    }
+
+    private var rowIcon: BuybackIconKind {
+        if row.isBuybackReady {
+            return .selected
+        }
+
+        if row.trackingState == .frozen {
+            return .bookmark
+        }
+
+        return row.priceStatus.icon
+    }
+
+    private var freezeIntent: FreezeScenarioIntent? {
+        guard row.trackingState == .watching,
+              let quote = row.quote,
+              quote.price.isFinite,
+              quote.price > 0
+        else {
+            return nil
+        }
+
+        return FreezeScenarioIntent(
+            scenarioID: row.id.uuidString,
+            sellPrice: quote.price,
+            currencyCode: quote.currencyCode,
+            quoteUnixTime: quote.timestamp?.timeIntervalSince1970 ?? 0
         )
     }
 
@@ -1019,6 +1157,29 @@ private struct PortfolioAssetRow: View {
             return nil
         }
     }
+
+    private func secondaryValue(for calculation: BuybackCalculation) -> String {
+        if row.isBuybackReady {
+            return "Ready"
+        }
+
+        if row.trackingState == .frozen {
+            if let currentMarketPrice = row.currentMarketPrice {
+                let currencyCode = row.quote?.currencyCode ?? calculation.currencyCode
+                return "Now \(currentMarketPrice.moneyString(currencyCode: currencyCode))"
+            }
+
+            if let frozenSellPrice = row.frozenSellPrice {
+                return "Frozen \(frozenSellPrice.moneyString(currencyCode: calculation.currencyCode))"
+            }
+        }
+
+        if let alert = row.alert, alert.isEnabled {
+            return "Alert \(alert.targetPrice.moneyString(currencyCode: alert.currencyCode))"
+        }
+
+        return "Price \(calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode))"
+    }
 }
 
 private struct PortfolioWidgetFooter: View {
@@ -1026,10 +1187,10 @@ private struct PortfolioWidgetFooter: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            BuybackIcon(.live, tint: .secondary)
+            BuybackIcon(.live, tint: WidgetTint.muted)
                 .frame(width: 12, height: 12)
 
-            Text("Refreshes on WidgetKit schedule")
+            Text("Freeze uses latest widget quote; alerts are checked in app")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -1051,8 +1212,8 @@ private struct LiquidWidgetIcon: View {
             .frame(width: size, height: size)
             .background {
                 Circle()
-                    .fill(tint.opacity(0.12))
-                    .glassEffect(.regular.tint(tint.opacity(0.16)), in: Circle())
+                    .fill(WidgetTint.glass.opacity(0.065))
+                    .glassEffect(.regular.tint(WidgetTint.glass.opacity(0.085)), in: Circle())
             }
     }
 }
@@ -1069,8 +1230,8 @@ private struct WidgetHeader: View {
                 .frame(width: WidgetMetrics.iconBubbleSize(compact: compact), height: WidgetMetrics.iconBubbleSize(compact: compact))
                 .background {
                     Circle()
-                        .fill(statusTint.opacity(0.12))
-                        .glassEffect(.regular.tint(statusTint.opacity(0.18)), in: Circle())
+                        .fill(WidgetTint.glass.opacity(0.065))
+                        .glassEffect(.regular.tint(WidgetTint.glass.opacity(0.085)), in: Circle())
                 }
 
             VStack(alignment: .leading, spacing: compact ? 0 : 1) {
@@ -1115,9 +1276,9 @@ private struct WidgetHeader: View {
     private var statusTint: Color {
         switch entry.priceStatus {
         case .live:
-            return .teal
+            return WidgetTint.accent
         case .fallback:
-            return .orange
+            return WidgetTint.muted
         }
     }
 }
@@ -1153,9 +1314,9 @@ private struct WidgetStatusPill: View {
     private var tint: Color {
         switch status {
         case .live:
-            return .teal
+            return WidgetTint.accent
         case .fallback:
-            return .orange
+            return WidgetTint.muted
         }
     }
 }
@@ -1243,9 +1404,7 @@ private struct DropBar: View {
         min(max(dropPercent / 40, 0), 1)
     }
 
-    private var fillColor: Color {
-        renderingMode == .fullColor ? .orange : .primary
-    }
+    private var fillColor: Color { WidgetTint.accent }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1264,7 +1423,7 @@ private struct DropBar: View {
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(.secondary.opacity(0.16))
+                        .fill(WidgetTint.muted.opacity(0.16))
                         .glassEffect(.regular, in: Capsule())
 
                     Capsule()
@@ -1286,9 +1445,9 @@ private struct BuybackWidgetBackground: View {
 
             LinearGradient(
                 colors: [
-                    .teal.opacity(0.18),
-                    .blue.opacity(0.10),
-                    .orange.opacity(0.08),
+                    WidgetTint.glass.opacity(0.040),
+                    WidgetTint.muted.opacity(0.026),
+                    WidgetTint.glass.opacity(0.020),
                     .clear
                 ],
                 startPoint: .topLeading,
@@ -1369,6 +1528,7 @@ private extension BuybackEntry {
             statusMessage: nil
         ),
         priceStatus: .live,
+        alert: PriceAlert(symbol: "AAPL", targetPrice: 140, currencyCode: "USD", isEnabled: true, lastTriggeredAt: nil),
         calculation: BuybackCalculator.calculate(
             symbol: "AAPL",
             sellPrice: 185,
@@ -1386,6 +1546,7 @@ private extension BuybackEntry {
         fallbackSellPrice: 185,
         quote: nil,
         priceStatus: .fallback("Missing key"),
+        alert: nil,
         calculation: BuybackCalculator.calculate(
             symbol: "AAPL",
             sellPrice: 185,
@@ -1403,6 +1564,7 @@ private extension BuybackEntry {
         fallbackSellPrice: 0,
         quote: nil,
         priceStatus: .fallback("Invalid"),
+        alert: nil,
         calculation: nil
     )
 }
@@ -1427,11 +1589,17 @@ private extension BuybackPortfolioEntry {
                     statusMessage: nil
                 ),
                 priceStatus: .live,
+                alert: PriceAlert(symbol: "AAPL", targetPrice: 140, currencyCode: "USD", isEnabled: true, lastTriggeredAt: nil),
                 calculation: BuybackCalculator.calculate(
                     symbol: "AAPL",
                     sellPrice: 185,
                     gainAtSellPercent: 463.10
-                )
+                ),
+                trackingState: .watching,
+                frozenSellPrice: nil,
+                currentMarketPrice: 185,
+                activeSellPrice: 185,
+                isBuybackReady: false
             ),
             BuybackPortfolioRow(
                 id: UUID(uuidString: "B8612D95-6E3D-46C0-94B4-48FAF1FD71EC") ?? UUID(),
@@ -1441,7 +1609,7 @@ private extension BuybackPortfolioEntry {
                 assetExchange: "US",
                 quote: MarketQuote(
                     symbol: "MSFT",
-                    price: 430,
+                    price: 300,
                     currencyCode: "USD",
                     timestamp: .now,
                     source: .finnhub,
@@ -1449,11 +1617,17 @@ private extension BuybackPortfolioEntry {
                     statusMessage: nil
                 ),
                 priceStatus: .live,
+                alert: nil,
                 calculation: BuybackCalculator.calculate(
                     symbol: "MSFT",
                     sellPrice: 430,
                     gainAtSellPercent: 155
-                )
+                ),
+                trackingState: .frozen,
+                frozenSellPrice: 430,
+                currentMarketPrice: 300,
+                activeSellPrice: 430,
+                isBuybackReady: true
             ),
             BuybackPortfolioRow(
                 id: UUID(uuidString: "B92D86F8-6C2B-4D2C-8E42-34DD2F7B27AA") ?? UUID(),
@@ -1463,12 +1637,18 @@ private extension BuybackPortfolioEntry {
                 assetExchange: "Germany",
                 quote: nil,
                 priceStatus: .fallback("Saved price"),
+                alert: PriceAlert(symbol: "SAP.DE", targetPrice: 210, currencyCode: "EUR", isEnabled: true, lastTriggeredAt: nil),
                 calculation: BuybackCalculator.calculate(
                     symbol: "SAP.DE",
                     sellPrice: 240,
                     gainAtSellPercent: 82,
                     currencyCode: "EUR"
-                )
+                ),
+                trackingState: .watching,
+                frozenSellPrice: nil,
+                currentMarketPrice: nil,
+                activeSellPrice: 240,
+                isBuybackReady: false
             )
         ],
         hasSavedScenarios: true

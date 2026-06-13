@@ -15,6 +15,22 @@ final class APIKeySettingsViewModel: ObservableObject {
         MarketDataClientFactory.sanitizedAPIKey(openFIGIAPIKey)
     }
 
+    var validationMessage: String? {
+        if let message = APIKeyValidator.validationMessage(for: finnhubAPIKey) {
+            return "Finnhub: \(message)"
+        }
+
+        if let message = APIKeyValidator.validationMessage(for: openFIGIAPIKey) {
+            return "OpenFIGI: \(message)"
+        }
+
+        return nil
+    }
+
+    var canSave: Bool {
+        validationMessage == nil
+    }
+
     var hasRuntimeFinnhubAPIKey: Bool {
         effectiveFinnhubAPIKey != nil
     }
@@ -61,10 +77,12 @@ final class APIKeySettingsViewModel: ObservableObject {
 
     func save() {
         do {
-            try APIKeyStore.set(finnhubAPIKey, for: .finnhub)
-            try APIKeyStore.set(openFIGIAPIKey, for: .openFIGI)
+            let validatedFinnhubKey = try APIKeyValidator.validatedAPIKey(finnhubAPIKey, for: .finnhub)
+            let validatedOpenFIGIKey = try APIKeyValidator.validatedAPIKey(openFIGIAPIKey, for: .openFIGI)
+            try APIKeyStore.set(validatedFinnhubKey, for: .finnhub)
+            try APIKeyStore.set(validatedOpenFIGIKey, for: .openFIGI)
             load()
-            statusMessage = "API keys saved."
+            statusMessage = "API keys saved securely in Keychain."
         } catch {
             statusMessage = error.localizedDescription
         }

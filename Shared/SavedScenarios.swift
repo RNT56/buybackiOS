@@ -34,6 +34,51 @@ enum SavedScenarioStorage {
         userDefaults.set(data, forKey: storageKey)
     }
 
+    @discardableResult
+    static func freezeScenario(
+        id: UUID,
+        sellPrice: Double,
+        currencyCode: String,
+        quoteTimestamp: Date?,
+        userDefaults: UserDefaults = BuybackSharedStorage.userDefaults
+    ) -> Bool {
+        guard sellPrice.isFinite, sellPrice > 0 else {
+            return false
+        }
+
+        var scenarios = load(userDefaults: userDefaults)
+        guard let index = scenarios.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+
+        scenarios[index].trackingState = .frozen
+        scenarios[index].frozenSellPrice = sellPrice
+        scenarios[index].frozenCurrencyCode = currencyCode.normalizedCurrencyCode
+        scenarios[index].frozenAt = .now
+        scenarios[index].frozenQuoteTimestamp = quoteTimestamp
+        save(scenarios, userDefaults: userDefaults)
+        return true
+    }
+
+    @discardableResult
+    static func unfreezeScenario(
+        id: UUID,
+        userDefaults: UserDefaults = BuybackSharedStorage.userDefaults
+    ) -> Bool {
+        var scenarios = load(userDefaults: userDefaults)
+        guard let index = scenarios.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+
+        scenarios[index].trackingState = .watching
+        scenarios[index].frozenSellPrice = nil
+        scenarios[index].frozenCurrencyCode = nil
+        scenarios[index].frozenAt = nil
+        scenarios[index].frozenQuoteTimestamp = nil
+        save(scenarios, userDefaults: userDefaults)
+        return true
+    }
+
     private static func decode(from userDefaults: UserDefaults) -> [SavedBuybackScenario]? {
         guard let data = userDefaults.data(forKey: storageKey),
               let decoded = try? JSONDecoder().decode([SavedBuybackScenario].self, from: data)
@@ -42,6 +87,22 @@ enum SavedScenarioStorage {
         }
 
         return decoded
+    }
+}
+
+enum ScenarioTrackingState: String, Codable, CaseIterable, Identifiable, Sendable {
+    case watching
+    case frozen
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .watching:
+            return "Watching"
+        case .frozen:
+            return "Frozen"
+        }
     }
 }
 
@@ -58,6 +119,7 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         case sellPrice
         case gainPercent
         case sharesToSell
+        case averageCostBasis
         case taxProfile
         case taxRatePercent
         case taxCurrencyCode
@@ -68,6 +130,11 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         case slippagePercent
         case taxLotsEnabled
         case taxLots
+        case trackingState
+        case frozenSellPrice
+        case frozenCurrencyCode
+        case frozenAt
+        case frozenQuoteTimestamp
     }
 
     var id: UUID
@@ -81,6 +148,7 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
     var sellPrice: Double
     var gainPercent: Double
     var sharesToSell: Double
+    var averageCostBasis: Double?
     var taxProfile: TaxProfile
     var taxRatePercent: Double
     var taxCurrencyCode: String
@@ -91,6 +159,11 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
     var slippagePercent: Double
     var taxLotsEnabled: Bool
     var taxLots: [TaxLot]
+    var trackingState: ScenarioTrackingState
+    var frozenSellPrice: Double?
+    var frozenCurrencyCode: String?
+    var frozenAt: Date?
+    var frozenQuoteTimestamp: Date?
 
     init(
         id: UUID,
@@ -104,6 +177,7 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         sellPrice: Double,
         gainPercent: Double,
         sharesToSell: Double,
+        averageCostBasis: Double? = nil,
         taxProfile: TaxProfile = BuybackCalculator.defaultTaxProfile,
         taxRatePercent: Double,
         taxCurrencyCode: String = BuybackCalculator.defaultCurrencyCode,
@@ -113,7 +187,12 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         buyFeeTotal: Double,
         slippagePercent: Double,
         taxLotsEnabled: Bool = false,
-        taxLots: [TaxLot] = []
+        taxLots: [TaxLot] = [],
+        trackingState: ScenarioTrackingState = .watching,
+        frozenSellPrice: Double? = nil,
+        frozenCurrencyCode: String? = nil,
+        frozenAt: Date? = nil,
+        frozenQuoteTimestamp: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -126,6 +205,7 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         self.sellPrice = sellPrice
         self.gainPercent = gainPercent
         self.sharesToSell = sharesToSell
+        self.averageCostBasis = averageCostBasis ?? Self.legacyAverageCostBasis(sellPrice: sellPrice, gainPercent: gainPercent)
         self.taxProfile = taxProfile
         self.taxRatePercent = taxRatePercent
         self.taxCurrencyCode = taxCurrencyCode
@@ -136,6 +216,11 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         self.slippagePercent = slippagePercent
         self.taxLotsEnabled = taxLotsEnabled
         self.taxLots = taxLots
+        self.trackingState = trackingState
+        self.frozenSellPrice = frozenSellPrice
+        self.frozenCurrencyCode = frozenCurrencyCode?.normalizedCurrencyCode
+        self.frozenAt = frozenAt
+        self.frozenQuoteTimestamp = frozenQuoteTimestamp
     }
 
     init(from decoder: Decoder) throws {
@@ -151,6 +236,8 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         sellPrice = try container.decode(Double.self, forKey: .sellPrice)
         gainPercent = try container.decode(Double.self, forKey: .gainPercent)
         sharesToSell = try container.decode(Double.self, forKey: .sharesToSell)
+        averageCostBasis = try container.decodeIfPresent(Double.self, forKey: .averageCostBasis)
+            ?? Self.legacyAverageCostBasis(sellPrice: sellPrice, gainPercent: gainPercent)
         taxProfile = try container.decodeIfPresent(TaxProfile.self, forKey: .taxProfile) ?? BuybackCalculator.defaultTaxProfile
         taxRatePercent = try container.decode(Double.self, forKey: .taxRatePercent)
         taxCurrencyCode = try container.decodeIfPresent(String.self, forKey: .taxCurrencyCode) ?? currencyCode
@@ -161,6 +248,11 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         slippagePercent = try container.decode(Double.self, forKey: .slippagePercent)
         taxLotsEnabled = try container.decodeIfPresent(Bool.self, forKey: .taxLotsEnabled) ?? false
         taxLots = try container.decodeIfPresent([TaxLot].self, forKey: .taxLots) ?? []
+        trackingState = try container.decodeIfPresent(ScenarioTrackingState.self, forKey: .trackingState) ?? .watching
+        frozenSellPrice = try container.decodeIfPresent(Double.self, forKey: .frozenSellPrice)
+        frozenCurrencyCode = try container.decodeIfPresent(String.self, forKey: .frozenCurrencyCode)?.normalizedCurrencyCode
+        frozenAt = try container.decodeIfPresent(Date.self, forKey: .frozenAt)
+        frozenQuoteTimestamp = try container.decodeIfPresent(Date.self, forKey: .frozenQuoteTimestamp)
     }
 
     var displayTitle: String {
@@ -172,43 +264,20 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
     }
 
     var calculation: BuybackCalculation? {
-        if taxLotsEnabled,
-           let lotAverageCostBasis = TaxLot.weightedAverageCostBasis(taxLots) {
-            let lotShares = TaxLot.totalShares(taxLots)
-            guard lotShares > 0 else { return nil }
+        calculation(using: nil)
+    }
 
-            return BuybackCalculator.calculate(
-                symbol: symbol,
-                sharesToSell: lotShares,
-                averageCostBasis: lotAverageCostBasis,
-                sellPrice: sellPrice,
-                taxProfile: taxProfile,
-                taxRatePercent: taxRatePercent,
-                taxCurrencyCode: taxCurrencyCode,
-                fxRateToTaxCurrency: fxRateToTaxCurrency,
-                targetExtraSharesPercent: targetExtraSharesPercent,
-                sellFeeTotal: sellFeeTotal,
-                buyFeeTotal: buyFeeTotal,
-                slippagePercent: slippagePercent,
-                currencyCode: currencyCode
-            )
+    private static func legacyAverageCostBasis(sellPrice: Double, gainPercent: Double) -> Double? {
+        guard sellPrice.isFinite,
+              gainPercent.isFinite,
+              sellPrice > 0,
+              gainPercent > -100
+        else {
+            return nil
         }
 
-        return BuybackCalculator.calculate(
-            symbol: symbol,
-            sellPrice: sellPrice,
-            gainAtSellPercent: gainPercent,
-            sharesToSell: sharesToSell,
-            taxProfile: taxProfile,
-            taxRatePercent: taxRatePercent,
-            taxCurrencyCode: taxCurrencyCode,
-            fxRateToTaxCurrency: fxRateToTaxCurrency,
-            targetExtraSharesPercent: targetExtraSharesPercent,
-            sellFeeTotal: sellFeeTotal,
-            buyFeeTotal: buyFeeTotal,
-            slippagePercent: slippagePercent,
-            currencyCode: currencyCode
-        )
+        let basis = sellPrice / (1 + gainPercent / 100)
+        return basis.isFinite && basis > 0 ? basis : nil
     }
 }
 
@@ -234,6 +303,10 @@ final class SavedScenarioStore: ObservableObject {
     func delete(_ scenario: SavedBuybackScenario) {
         scenarios.removeAll { $0.id == scenario.id }
         persist()
+    }
+
+    func reload() {
+        load()
     }
 
     private func load() {

@@ -2,25 +2,14 @@ import Combine
 import Foundation
 import UserNotifications
 
-struct PriceAlert: Codable, Equatable, Identifiable {
-    var id: String { symbol }
-
-    var symbol: String
-    var targetPrice: Double
-    var currencyCode: String
-    var isEnabled: Bool
-    var lastTriggeredAt: Date?
-}
-
 @MainActor
 final class PriceAlertStore: ObservableObject {
     @Published private(set) var alerts: [PriceAlert] = []
     @Published var statusMessage: LookupMessage?
 
-    private let storageKey = "buybackCalculator.priceAlerts"
     private let userDefaults: UserDefaults
 
-    init(userDefaults: UserDefaults = .standard) {
+    init(userDefaults: UserDefaults = BuybackSharedStorage.userDefaults) {
         self.userDefaults = userDefaults
         load()
     }
@@ -48,7 +37,7 @@ final class PriceAlertStore: ObservableObject {
             at: 0
         )
         persist()
-        statusMessage = .info("Alert armed at \(targetPrice.moneyString(currencyCode: currencyCode)).")
+        statusMessage = .info("Alert armed at \(targetPrice.moneyString(currencyCode: currencyCode)). It is checked when app prices refresh.")
     }
 
     func disable(symbol: String) {
@@ -63,14 +52,11 @@ final class PriceAlertStore: ObservableObject {
     }
 
     func evaluate(symbol: String, price: Double, calculation: BuybackCalculation) {
-        let normalizedSymbol = symbol.normalizedStockSymbol
-        guard let index = alerts.firstIndex(where: { $0.symbol == normalizedSymbol }),
-              alerts[index].isEnabled,
-              price.isFinite,
-              price > 0,
-              price <= alerts[index].targetPrice,
-              shouldTrigger(alerts[index])
-        else {
+        guard let index = PriceAlertEvaluator.triggerIndex(
+            in: alerts,
+            symbol: symbol,
+            price: price
+        ) else {
             return
         }
 
@@ -81,15 +67,7 @@ final class PriceAlertStore: ObservableObject {
             currentPrice: price,
             buybackLimit: calculation.maximumBuybackPrice
         )
-        statusMessage = .info("Alert triggered for \(normalizedSymbol).")
-    }
-
-    private func shouldTrigger(_ alert: PriceAlert) -> Bool {
-        guard let lastTriggeredAt = alert.lastTriggeredAt else {
-            return true
-        }
-
-        return abs(lastTriggeredAt.timeIntervalSinceNow) > 60 * 60 * 6
+        statusMessage = .info("Alert triggered for \(alerts[index].symbol).")
     }
 
     private func scheduleNotification(alert: PriceAlert, currentPrice: Double, buybackLimit: Double) {
@@ -123,21 +101,10 @@ final class PriceAlertStore: ObservableObject {
     }
 
     private func load() {
-        guard let data = userDefaults.data(forKey: storageKey),
-              let decoded = try? JSONDecoder().decode([PriceAlert].self, from: data)
-        else {
-            alerts = []
-            return
-        }
-
-        alerts = decoded
+        alerts = PriceAlertStorage.load(userDefaults: userDefaults)
     }
 
     private func persist() {
-        guard let data = try? JSONEncoder().encode(alerts) else {
-            return
-        }
-
-        userDefaults.set(data, forKey: storageKey)
+        PriceAlertStorage.save(alerts, userDefaults: userDefaults)
     }
 }
