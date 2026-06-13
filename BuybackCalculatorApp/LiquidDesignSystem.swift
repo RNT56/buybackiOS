@@ -78,7 +78,7 @@ enum LiquidIconButtonProminence {
         case .toolbar:
             return 1.08
         case .dock:
-            return 1.46
+            return 1.20
         case .action:
             return 1.12
         case .inline:
@@ -91,7 +91,7 @@ enum LiquidIconButtonProminence {
         case .toolbar:
             return min(20, controlSize * 0.43)
         case .dock:
-            return min(24, controlSize * 0.55)
+            return min(22, controlSize * 0.50)
         case .action:
             return min(21, controlSize * 0.40)
         case .inline:
@@ -114,6 +114,7 @@ struct LiquidIconButton: View {
     private let prominence: LiquidIconButtonProminence
     private let isSelected: Bool
     private let isDisabled: Bool
+    private let showsGlyph: Bool
 
     init(
         icon: BuybackIconKind,
@@ -122,7 +123,8 @@ struct LiquidIconButton: View {
         glyphSize: CGFloat? = nil,
         prominence: LiquidIconButtonProminence = .action,
         isSelected: Bool = false,
-        isDisabled: Bool = false
+        isDisabled: Bool = false,
+        showsGlyph: Bool = true
     ) {
         self.icon = icon
         self.systemName = nil
@@ -132,6 +134,7 @@ struct LiquidIconButton: View {
         self.prominence = prominence
         self.isSelected = isSelected
         self.isDisabled = isDisabled
+        self.showsGlyph = showsGlyph
     }
 
     init(
@@ -141,7 +144,8 @@ struct LiquidIconButton: View {
         glyphSize: CGFloat? = nil,
         prominence: LiquidIconButtonProminence = .action,
         isSelected: Bool = false,
-        isDisabled: Bool = false
+        isDisabled: Bool = false,
+        showsGlyph: Bool = true
     ) {
         self.icon = nil
         self.systemName = systemName
@@ -151,6 +155,7 @@ struct LiquidIconButton: View {
         self.prominence = prominence
         self.isSelected = isSelected
         self.isDisabled = isDisabled
+        self.showsGlyph = showsGlyph
     }
 
     var body: some View {
@@ -160,7 +165,10 @@ struct LiquidIconButton: View {
 
         ZStack {
             buttonChrome(shape: shape, isDisabled: effectiveDisabled)
-            glyph(size: resolvedGlyphSize, isDisabled: effectiveDisabled)
+
+            if showsGlyph {
+                glyph(size: resolvedGlyphSize, isDisabled: effectiveDisabled)
+            }
         }
         .frame(width: size, height: size)
         .contentShape(Circle())

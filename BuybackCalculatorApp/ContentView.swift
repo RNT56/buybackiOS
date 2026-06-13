@@ -1454,13 +1454,13 @@ struct ContentView: View {
                     icon: icon,
                     role: role,
                     size: 44,
-                    glyphSize: 24,
                     prominence: .dock,
                     isSelected: isSelected,
-                    isDisabled: isDisabled
+                    isDisabled: isDisabled,
+                    showsGlyph: false
                 )
 
-                dockGlyph(icon: icon, isDisabled: isDisabled)
+                dockGlyph(icon: icon, isSelected: isSelected, isDisabled: isDisabled)
             }
             .frame(width: 52, height: 52)
             .contentShape(Circle())
@@ -1471,13 +1471,35 @@ struct ContentView: View {
         .accessibilityValue(isDisabled ? "Unavailable" : (isSelected ? "Selected" : ""))
     }
 
-    private func dockGlyph(icon: BuybackIconKind, isDisabled: Bool) -> some View {
-        BuybackIcon(icon, tint: Color.white.opacity(isDisabled ? 0.90 : 1), lineScale: isDisabled ? 1.65 : 1.55)
+    private func dockGlyph(icon: BuybackIconKind, isSelected: Bool, isDisabled: Bool) -> some View {
+        let opacity = isDisabled ? 0.76 : 0.98
+        let glyphSize: CGFloat = isSelected ? 21 : 20
+        let symbolName = dockSymbolName(for: icon)
+
+        return Image(systemName: symbolName)
+            .font(.system(size: glyphSize, weight: isSelected ? .medium : .regular))
+            .symbolRenderingMode(.monochrome)
+            .foregroundStyle(Color.white.opacity(opacity))
             .frame(width: 24, height: 24)
-            .shadow(color: Color.black.opacity(isDisabled ? 0.32 : 0.50), radius: 2.2, y: 1.0)
+            .shadow(color: Color.black.opacity(isDisabled ? 0.20 : 0.30), radius: isSelected ? 1.5 : 1.15, y: 0.7)
             .compositingGroup()
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+
+    private func dockSymbolName(for icon: BuybackIconKind) -> String {
+        switch icon {
+        case .asset:
+            return "magnifyingglass"
+        case .sliders:
+            return "slider.horizontal.3"
+        case .sensitivity:
+            return "chart.line.uptrend.xyaxis"
+        case .keySettings:
+            return "key"
+        default:
+            return "circle"
+        }
     }
 
     private func dockSelectionLens(role: LiquidIconButtonRole) -> some View {
