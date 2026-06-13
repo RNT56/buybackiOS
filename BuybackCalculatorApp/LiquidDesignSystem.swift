@@ -5,7 +5,6 @@ enum LiquidPalette {
     static let glassTint = Color(red: 0.25, green: 0.50, blue: 0.54)
     static let muted = Color(red: 0.43, green: 0.48, blue: 0.54)
     static let danger = Color(red: 0.64, green: 0.28, blue: 0.33)
-    static let ink = Color.primary
 }
 
 enum LiquidMetrics {
@@ -21,8 +20,315 @@ enum LiquidControlChrome {
     static let iconInteractiveFillOpacity = 0.046
     static let iconGlassOpacity = 0.058
     static let iconInteractiveGlassOpacity = 0.078
-    static let actionFillOpacity = 0.054
-    static let actionGlassOpacity = 0.082
+}
+
+enum LiquidIconButtonRole {
+    case accent
+    case muted
+    case danger
+    case neutral
+    case custom(Color)
+
+    var tint: Color {
+        switch self {
+        case .accent:
+            return LiquidPalette.accent
+        case .muted:
+            return LiquidPalette.muted
+        case .danger:
+            return LiquidPalette.danger
+        case .neutral:
+            return LiquidPalette.glassTint
+        case .custom(let color):
+            return color
+        }
+    }
+}
+
+enum LiquidIconButtonProminence {
+    case toolbar
+    case dock
+    case action
+    case inline
+
+    var defaultSize: CGFloat {
+        switch self {
+        case .toolbar:
+            return 46
+        case .dock:
+            return 44
+        case .action:
+            return 52
+        case .inline:
+            return 40
+        }
+    }
+
+    var glyphWeight: Font.Weight {
+        switch self {
+        case .toolbar:
+            return .semibold
+        case .dock, .action, .inline:
+            return .bold
+        }
+    }
+
+    var glyphLineScale: CGFloat {
+        switch self {
+        case .toolbar:
+            return 1.08
+        case .dock:
+            return 1.46
+        case .action:
+            return 1.12
+        case .inline:
+            return 1.10
+        }
+    }
+
+    func defaultGlyphSize(for controlSize: CGFloat) -> CGFloat {
+        switch self {
+        case .toolbar:
+            return min(20, controlSize * 0.43)
+        case .dock:
+            return min(24, controlSize * 0.55)
+        case .action:
+            return min(21, controlSize * 0.40)
+        case .inline:
+            return min(17, controlSize * 0.42)
+        }
+    }
+}
+
+struct LiquidIconButton: View {
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
+
+    private let icon: BuybackIconKind?
+    private let systemName: String?
+    private let role: LiquidIconButtonRole
+    private let size: CGFloat
+    private let glyphSize: CGFloat?
+    private let prominence: LiquidIconButtonProminence
+    private let isSelected: Bool
+    private let isDisabled: Bool
+
+    init(
+        icon: BuybackIconKind,
+        role: LiquidIconButtonRole = .accent,
+        size: CGFloat? = nil,
+        glyphSize: CGFloat? = nil,
+        prominence: LiquidIconButtonProminence = .action,
+        isSelected: Bool = false,
+        isDisabled: Bool = false
+    ) {
+        self.icon = icon
+        self.systemName = nil
+        self.role = role
+        self.size = size ?? prominence.defaultSize
+        self.glyphSize = glyphSize
+        self.prominence = prominence
+        self.isSelected = isSelected
+        self.isDisabled = isDisabled
+    }
+
+    init(
+        systemName: String,
+        role: LiquidIconButtonRole = .accent,
+        size: CGFloat? = nil,
+        glyphSize: CGFloat? = nil,
+        prominence: LiquidIconButtonProminence = .action,
+        isSelected: Bool = false,
+        isDisabled: Bool = false
+    ) {
+        self.icon = nil
+        self.systemName = systemName
+        self.role = role
+        self.size = size ?? prominence.defaultSize
+        self.glyphSize = glyphSize
+        self.prominence = prominence
+        self.isSelected = isSelected
+        self.isDisabled = isDisabled
+    }
+
+    var body: some View {
+        let shape = Circle()
+        let effectiveDisabled = isDisabled || !isEnabled
+        let resolvedGlyphSize = glyphSize ?? prominence.defaultGlyphSize(for: size)
+
+        ZStack {
+            buttonChrome(shape: shape, isDisabled: effectiveDisabled)
+            glyph(size: resolvedGlyphSize, isDisabled: effectiveDisabled)
+        }
+        .frame(width: size, height: size)
+        .contentShape(Circle())
+        .scaleEffect(isSelected ? 1.018 : 1)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func glyph(size: CGFloat, isDisabled: Bool) -> some View {
+        let glyphTint = Color.white.opacity(isDisabled ? disabledGlyphOpacity : 0.98)
+        let lineScale = prominence.glyphLineScale * (isDisabled ? 1.10 : 1)
+
+        if let icon {
+            BuybackIcon(icon, tint: glyphTint, lineScale: lineScale)
+                .frame(width: size, height: size)
+                .shadow(color: glyphShadowColor(isDisabled: isDisabled), radius: glyphShadowRadius, y: glyphShadowOffset)
+        } else if let systemName {
+            Image(systemName: systemName)
+                .font(.system(size: size, weight: isDisabled ? .bold : prominence.glyphWeight))
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(glyphTint)
+                .shadow(color: glyphShadowColor(isDisabled: isDisabled), radius: glyphShadowRadius, y: glyphShadowOffset)
+        }
+    }
+
+    @ViewBuilder
+    private func buttonChrome(shape: Circle, isDisabled: Bool) -> some View {
+        let tint = role.tint
+
+        if reduceTransparency {
+            shape
+                .fill(tint.opacity(reducedTransparencyFillOpacity(isDisabled: isDisabled)))
+                .overlay {
+                    shape.strokeBorder(strokeColor(isDisabled: isDisabled), lineWidth: strokeWidth)
+                }
+        } else if isDisabled {
+            shape
+                .fill(tint.opacity(fillOpacity(isDisabled: true)))
+                .glassEffect(.regular.tint(tint.opacity(glassOpacity(isDisabled: true))), in: shape)
+                .overlay {
+                    shape.strokeBorder(strokeColor(isDisabled: true), lineWidth: strokeWidth)
+                }
+                .overlay {
+                    shineOverlay(shape: shape, isDisabled: true)
+                }
+        } else {
+            shape
+                .fill(tint.opacity(fillOpacity(isDisabled: false)))
+                .glassEffect(.regular.tint(tint.opacity(glassOpacity(isDisabled: false))).interactive(), in: shape)
+                .overlay {
+                    shape.strokeBorder(strokeColor(isDisabled: false), lineWidth: strokeWidth)
+                }
+                .overlay {
+                    shineOverlay(shape: shape, isDisabled: false)
+                }
+                .shadow(color: shadowColor, radius: isSelected ? 13 : 8, y: isSelected ? 5 : 3)
+        }
+    }
+
+    private func shineOverlay(shape: Circle, isDisabled: Bool) -> some View {
+        shape
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isDisabled ? 0.035 : (isSelected ? 0.22 : 0.15)),
+                        Color.white.opacity(isDisabled ? 0.010 : 0.05),
+                        Color.clear
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .blendMode(.plusLighter)
+    }
+
+    private var isHighContrast: Bool {
+        colorSchemeContrast == .increased
+    }
+
+    private var strokeWidth: CGFloat {
+        isSelected ? 1.15 : 0.85
+    }
+
+    private var disabledGlyphOpacity: Double {
+        if colorScheme == .light {
+            return isHighContrast ? 0.98 : 0.94
+        }
+
+        return isHighContrast ? 0.92 : 0.86
+    }
+
+    private var shadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.20 : 0.105)
+    }
+
+    private var glyphShadowRadius: CGFloat {
+        prominence == .dock ? 2.4 : 1.35
+    }
+
+    private var glyphShadowOffset: CGFloat {
+        prominence == .dock ? 1.05 : 0.8
+    }
+
+    private func glyphShadowColor(isDisabled: Bool) -> Color {
+        if prominence == .dock {
+            return Color.black.opacity(isDisabled ? 0.32 : 0.46)
+        }
+
+        return Color.black.opacity(isDisabled ? (colorScheme == .dark ? 0.24 : 0.30) : (colorScheme == .dark ? 0.32 : 0.24))
+    }
+
+    private func strokeColor(isDisabled: Bool) -> Color {
+        if isDisabled {
+            return Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+        }
+
+        if isSelected {
+            return Color.white.opacity(colorScheme == .dark ? 0.34 : 0.46)
+        }
+
+        return Color.white.opacity(colorScheme == .dark ? 0.20 : 0.32)
+    }
+
+    private func fillOpacity(isDisabled: Bool) -> Double {
+        let base: Double
+        switch prominence {
+        case .toolbar:
+            base = 0.115
+        case .dock:
+            base = 0.118
+        case .action:
+            base = 0.124
+        case .inline:
+            base = 0.112
+        }
+
+        let selectedBoost = isSelected ? 0.044 : 0
+        let contrastBoost = isHighContrast ? 0.040 : 0
+        let lightModeBoost = colorScheme == .light ? 0.018 : 0
+        let disabledReduction = isDisabled ? (colorScheme == .light ? 0.010 : 0.024) : 0
+        return max(0.055, base + selectedBoost + contrastBoost + lightModeBoost - disabledReduction)
+    }
+
+    private func glassOpacity(isDisabled: Bool) -> Double {
+        let base: Double
+        switch prominence {
+        case .toolbar:
+            base = 0.135
+        case .dock:
+            base = 0.140
+        case .action:
+            base = 0.148
+        case .inline:
+            base = 0.130
+        }
+
+        let selectedBoost = isSelected ? 0.052 : 0
+        let contrastBoost = isHighContrast ? 0.032 : 0
+        let disabledReduction = isDisabled ? (colorScheme == .light ? 0.012 : 0.030) : 0
+        return max(0.070, base + selectedBoost + contrastBoost - disabledReduction)
+    }
+
+    private func reducedTransparencyFillOpacity(isDisabled: Bool) -> Double {
+        let base = isHighContrast ? 0.26 : 0.20
+        let selectedBoost = isSelected ? 0.08 : 0
+        let disabledReduction = isDisabled ? 0.035 : 0
+        return max(0.12, base + selectedBoost - disabledReduction)
+    }
 }
 
 struct LiquidGlassBackground: View {
@@ -96,6 +402,7 @@ struct SectionTitle: View {
 
 struct LiquidGlassIcon: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     let icon: BuybackIconKind
@@ -118,99 +425,57 @@ struct LiquidGlassIcon: View {
     private func iconBackground(shape: Circle) -> some View {
         if reduceTransparency {
             shape
-                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                .fill(tint.opacity(colorSchemeContrast == .increased ? 0.12 : 0.08))
                 .overlay {
-                    shape.strokeBorder(.secondary.opacity(0.18), lineWidth: 0.7)
+                    shape.strokeBorder(tint.opacity(0.22), lineWidth: 0.7)
                 }
         } else if isInteractive {
             shape
-                .fill(LiquidPalette.glassTint.opacity(LiquidControlChrome.iconInteractiveFillOpacity))
-                .glassEffect(.regular.tint(LiquidPalette.glassTint.opacity(LiquidControlChrome.iconInteractiveGlassOpacity)).interactive(), in: shape)
+                .fill(tint.opacity(LiquidControlChrome.iconInteractiveFillOpacity + (colorSchemeContrast == .increased ? 0.026 : 0)))
+                .glassEffect(.regular.tint(tint.opacity(LiquidControlChrome.iconInteractiveGlassOpacity + 0.030)).interactive(), in: shape)
                 .overlay {
                     shape.strokeBorder(.white.opacity(colorScheme == .dark ? 0.16 : 0.24), lineWidth: 0.7)
                 }
         } else {
             shape
-                .fill(LiquidPalette.glassTint.opacity(LiquidControlChrome.iconFillOpacity))
-                .glassEffect(.regular.tint(LiquidPalette.glassTint.opacity(LiquidControlChrome.iconGlassOpacity)), in: shape)
+                .fill(tint.opacity(LiquidControlChrome.iconFillOpacity + (colorSchemeContrast == .increased ? 0.018 : 0)))
+                .glassEffect(.regular.tint(tint.opacity(LiquidControlChrome.iconGlassOpacity)), in: shape)
                 .overlay {
-                    shape.strokeBorder(.white.opacity(colorScheme == .dark ? 0.14 : 0.22), lineWidth: 0.7)
+                    shape.strokeBorder(.white.opacity(colorScheme == .dark ? 0.12 : 0.18), lineWidth: 0.7)
                 }
         }
     }
 }
 
 struct LiquidGlassActionIcon: View {
-    @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
     let icon: BuybackIconKind
     var tint: Color = LiquidPalette.accent
     var size: CGFloat = 42
 
     var body: some View {
-        let shape = Circle()
-
-        ZStack {
-            actionBackground(shape: shape)
-
-            BuybackIcon(icon, tint: .white.opacity(isEnabled ? 0.97 : 0.62), lineScale: 1.10)
-                .frame(width: size * 0.44, height: size * 0.44)
-                .shadow(color: .black.opacity(colorScheme == .dark ? 0.26 : 0.18), radius: 1.4, y: 0.8)
-        }
-            .frame(width: size, height: size)
-            .contentShape(Circle())
-    }
-
-    @ViewBuilder
-    private func actionBackground(shape: Circle) -> some View {
-        if reduceTransparency {
-            shape
-                .fill(LiquidPalette.glassTint.opacity(0.16))
-                .overlay {
-                    shape.strokeBorder(.secondary.opacity(0.20), lineWidth: 0.8)
-                }
-        } else {
-            shape
-                .fill(LiquidPalette.glassTint.opacity(LiquidControlChrome.actionFillOpacity))
-                .glassEffect(.regular.tint(LiquidPalette.glassTint.opacity(LiquidControlChrome.actionGlassOpacity)).interactive(), in: shape)
-                .overlay {
-                    shape.strokeBorder(.white.opacity(colorScheme == .dark ? 0.16 : 0.26), lineWidth: 0.8)
-                }
-        }
+        LiquidIconButton(
+            icon: icon,
+            role: .custom(tint),
+            size: size,
+            prominence: size <= 40 ? .inline : .action
+        )
     }
 }
 
 struct LiquidToolbarIcon: View {
-    @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
     let icon: BuybackIconKind
     var tint: Color = LiquidPalette.accent
     var iconSize: CGFloat = 19
     var controlSize: CGFloat = 44
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    Circle()
-                        .fill(LiquidPalette.glassTint.opacity(reduceTransparency ? 0.12 : LiquidControlChrome.actionFillOpacity))
-                }
-                .overlay {
-                    Circle()
-                        .strokeBorder(.white.opacity(colorScheme == .dark ? 0.16 : 0.24), lineWidth: 0.8)
-                }
-
-            BuybackIcon(icon, tint: .white.opacity(isEnabled ? 0.96 : 0.56), lineScale: 1.08)
-                .frame(width: iconSize, height: iconSize)
-                .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.18), radius: 1.2, y: 0.8)
-        }
-            .frame(width: controlSize, height: controlSize)
-            .contentShape(Circle())
+        LiquidIconButton(
+            icon: icon,
+            role: .custom(tint),
+            size: controlSize,
+            glyphSize: iconSize,
+            prominence: .toolbar
+        )
     }
 }
 

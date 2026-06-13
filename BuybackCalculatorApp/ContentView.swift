@@ -94,7 +94,10 @@ struct ContentView: View {
     @State private var freezeCurrencyCode = BuybackCalculator.defaultCurrencyCode
     @State private var freezeQuoteTimestamp: Date?
     @State private var topChromeBlurProgress = 0.0
+    @Namespace private var dockSelectionNamespace
     @FocusState private var assetLookupFieldFocused: Bool
+
+    private let targetExtraSliderUpperBound = 25.0
 
     private var activeSymbol: String {
         lookup.selectedAsset?.symbol.nilIfBlank ?? symbolText.normalizedStockSymbol.nilIfBlank ?? assetQuery.normalizedStockSymbol
@@ -142,6 +145,48 @@ struct ContentView: View {
 
     private var targetExtraSharesPercent: Double? {
         BuybackCalculator.parseDecimal(targetExtraText)
+    }
+
+    private var normalizedTargetExtraSharesPercent: Double {
+        guard let targetExtraSharesPercent, targetExtraSharesPercent.isFinite else {
+            return BuybackCalculator.fixedTargetExtraSharesPercent
+        }
+
+        return max(0, targetExtraSharesPercent)
+    }
+
+    private var targetExtraDisplayText: String {
+        guard let targetExtraSharesPercent, targetExtraSharesPercent.isFinite, targetExtraSharesPercent >= 0 else {
+            return "Check"
+        }
+
+        return "+" + targetExtraSharesPercent.compactPercentString
+    }
+
+    private var targetExtraSliderValue: Binding<Double> {
+        Binding(
+            get: {
+                min(normalizedTargetExtraSharesPercent, targetExtraSliderUpperBound)
+            },
+            set: { value in
+                setTargetExtraSharesPercent(value)
+            }
+        )
+    }
+
+    private var targetExtraSharePreview: String {
+        guard let targetExtraSharesPercent, targetExtraSharesPercent >= 0 else {
+            return "Enter 0% or higher."
+        }
+
+        let baseShares = taxLotsEnabled ? lotSharesToSell : sharesToSell
+        guard let baseShares, baseShares > 0 else {
+            return "Set shares to preview the target count."
+        }
+
+        let targetShares = baseShares * (1 + targetExtraSharesPercent / 100)
+        let extraShares = max(0, targetShares - baseShares)
+        return "\(baseShares.shareString) sold -> \(targetShares.shareString) target shares (+\(extraShares.shareString))."
     }
 
     private var sellFeeTotal: Double? {
@@ -247,7 +292,7 @@ struct ContentView: View {
                 .overlay(alignment: .bottom) {
                     launchActionDock(calculation: calculation)
                         .padding(.horizontal, 14)
-                        .padding(.bottom, -18)
+                        .padding(.bottom, 6)
                         .ignoresSafeArea(.container, edges: .bottom)
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -447,8 +492,7 @@ struct ContentView: View {
                             "Frozen sell price",
                             text: $freezePriceText,
                             suffix: freezeCurrencyCode,
-                            icon: .price,
-                            field: .price
+                            icon: .price
                         )
 
                         Button {
@@ -606,56 +650,61 @@ struct ContentView: View {
 
     @ViewBuilder
     private func resultDetails(_ calculation: BuybackCalculation) -> some View {
-            positionBreakdown(calculation)
-            calculationTrace(calculation)
-            sensitivitySection(calculation)
-            alertSection(calculation)
+        positionBreakdown(calculation)
+        calculationTrace(calculation)
+        sensitivitySection(calculation)
+        alertSection(calculation)
     }
 
     private func launchActionDock(calculation: BuybackCalculation?) -> some View {
-        GlassEffectContainer(spacing: 6) {
-            HStack(spacing: 6) {
-                dockIconButton(
-                    action: .asset,
-                    icon: .asset,
-                    tint: LiquidPalette.accent,
-                    accessibilityLabel: "Open asset lookup"
-                ) {
-                    openAssetLookup()
-                }
+        HStack(spacing: 6) {
+            dockIconButton(
+                action: .asset,
+                icon: .asset,
+                role: .accent,
+                accessibilityLabel: "Open asset lookup"
+            ) {
+                openAssetLookup()
+            }
 
-                dockIconButton(
-                    action: .advanced,
-                    icon: .sliders,
-                    tint: LiquidPalette.accent,
-                    accessibilityLabel: "Open advanced calculator settings"
-                ) {
-                    activeSheet = .advancedCalculator
-                }
+            dockIconButton(
+                action: .advanced,
+                icon: .sliders,
+                role: .accent,
+                accessibilityLabel: "Open advanced calculator settings"
+            ) {
+                activeSheet = .advancedCalculator
+            }
 
-                dockIconButton(
-                    action: .details,
-                    icon: .sensitivity,
-                    tint: LiquidPalette.muted,
-                    accessibilityLabel: "Open calculation details",
-                    isDisabled: calculation == nil
-                ) {
-                    activeSheet = .resultDetails
-                }
+            dockIconButton(
+                action: .details,
+                icon: .sensitivity,
+                role: .muted,
+                accessibilityLabel: "Open calculation details",
+                isDisabled: calculation == nil
+            ) {
+                activeSheet = .resultDetails
+            }
 
-                dockIconButton(
-                    action: .settings,
-                    icon: .keySettings,
-                    tint: LiquidPalette.accent,
-                    accessibilityLabel: "Open settings"
-                ) {
-                    activeSheet = .settings
-                }
+            dockIconButton(
+                action: .settings,
+                icon: .keySettings,
+                role: .accent,
+                accessibilityLabel: "Open settings"
+            ) {
+                activeSheet = .settings
             }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
-        .glassEffect(.regular.tint(LiquidPalette.glassTint.opacity(0.062)).interactive(), in: Capsule())
+        .background {
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    Capsule().fill(LiquidPalette.glassTint.opacity(0.040))
+                }
+                .glassEffect(.regular.tint(LiquidPalette.glassTint.opacity(0.070)).interactive(), in: Capsule())
+        }
         .shadow(color: .black.opacity(0.055), radius: 15, y: 7)
         .animation(.spring(response: 0.34, dampingFraction: 0.78), value: selectedDockAction)
     }
@@ -917,8 +966,8 @@ struct ContentView: View {
     private var advancedPositionContent: some View {
         advancedGroup("Position", icon: .shares) {
             VStack(alignment: .leading, spacing: 12) {
-                decimalField("Shares", text: $sharesText, suffix: "sh", icon: .shares, field: .shares, isDisabled: taxLotsEnabled)
-                decimalField("Extra shares target", text: $targetExtraText, suffix: "%", icon: .target, field: .targetExtra)
+                decimalField("Shares", text: $sharesText, suffix: "sh", icon: .shares, isDisabled: taxLotsEnabled)
+                targetExtraSharesSelector
                 toggleButton("Use tax lots", icon: .lots, isOn: $taxLotsEnabled)
 
                 if taxLotsEnabled {
@@ -927,6 +976,88 @@ struct ContentView: View {
             }
         }
         .liquidSurface()
+    }
+
+    private var targetExtraSharesSelector: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                IconLabel("Extra shares target", icon: .target, tint: .secondary, iconSize: 14)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.74)
+
+                Spacer(minLength: 8)
+
+                Text(targetExtraDisplayText)
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .liquidCapsuleSurface(tint: LiquidPalette.accent.opacity(0.55))
+            }
+
+            Slider(
+                value: targetExtraSliderValue,
+                in: 0...targetExtraSliderUpperBound,
+                step: 0.1
+            ) {
+                Text("Extra shares target")
+            } minimumValueLabel: {
+                Text("0%")
+                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.secondary)
+            } maximumValueLabel: {
+                Text("\(Int(targetExtraSliderUpperBound))%+")
+                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .tint(LiquidPalette.accent)
+
+            HStack(spacing: 9) {
+                targetExtraStepButton(symbol: "minus", accessibilityLabel: "Decrease extra shares target") {
+                    adjustTargetExtraSharesPercent(by: -0.5)
+                }
+                .disabled(normalizedTargetExtraSharesPercent <= 0)
+
+                HStack(spacing: 8) {
+                    TextField("Extra shares target", text: $targetExtraText)
+                        .keyboardType(.decimalPad)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.title3.weight(.semibold).monospacedDigit())
+                        .lineLimit(1)
+
+                    Text("%")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 13)
+                .frame(height: 48)
+                .liquidFieldSurface(isDisabled: false)
+
+                targetExtraStepButton(symbol: "plus", accessibilityLabel: "Increase extra shares target") {
+                    adjustTargetExtraSharesPercent(by: 0.5)
+                }
+            }
+
+            HStack(spacing: 8) {
+                BuybackIcon(.shares, tint: LiquidPalette.accent)
+                    .frame(width: 15, height: 15)
+
+                Text(targetExtraSharePreview)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .liquidCapsuleSurface(tint: LiquidPalette.accent.opacity(0.55))
+        }
+        .accessibilityElement(children: .contain)
     }
 
     private var taxLotContent: some View {
@@ -973,9 +1104,9 @@ struct ContentView: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                decimalField("Tax rate", text: $taxRateText, suffix: "%", icon: .taxRate, field: .taxRate, isDisabled: taxProfile != .custom)
-                textField("Tax currency", text: $taxCurrencyText, suffix: "ccy", icon: .taxCurrency, field: .taxCurrency)
-                decimalField("FX to tax currency", text: $fxRateText, suffix: "x", icon: .fx, field: .fxRate)
+                decimalField("Tax rate", text: $taxRateText, suffix: "%", icon: .taxRate, isDisabled: taxProfile != .custom)
+                textField("Tax currency", text: $taxCurrencyText, suffix: "ccy", icon: .taxCurrency)
+                decimalField("FX to tax currency", text: $fxRateText, suffix: "x", icon: .fx)
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -998,9 +1129,9 @@ struct ContentView: View {
     private var advancedCostsContent: some View {
         advancedGroup("Costs", icon: .costs) {
             VStack(alignment: .leading, spacing: 12) {
-                decimalField("Slippage buffer", text: $slippageText, suffix: "%", icon: .slippage, field: .slippage)
-                decimalField("Sell fees", text: $sellFeeText, suffix: activeCurrencyCode, icon: .sellFee, field: .sellFee)
-                decimalField("Buy fees", text: $buyFeeText, suffix: activeCurrencyCode, icon: .buyFee, field: .buyFee)
+                decimalField("Slippage buffer", text: $slippageText, suffix: "%", icon: .slippage)
+                decimalField("Sell fees", text: $sellFeeText, suffix: activeCurrencyCode, icon: .sellFee)
+                decimalField("Buy fees", text: $buyFeeText, suffix: activeCurrencyCode, icon: .buyFee)
             }
         }
         .liquidSurface()
@@ -1042,6 +1173,23 @@ struct ContentView: View {
         .accessibilityValue(isOn.wrappedValue ? "On" : "Off")
     }
 
+    private func targetExtraStepButton(
+        symbol: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            LiquidIconButton(
+                systemName: symbol,
+                role: .accent,
+                size: 40,
+                prominence: .inline
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
     private func expansionHeader(_ title: String, icon: BuybackIconKind, isExpanded: Bool) -> some View {
         HStack(spacing: 10) {
             IconLabel(title, icon: icon, iconSize: 17)
@@ -1081,7 +1229,6 @@ struct ContentView: View {
         text: Binding<String>,
         suffix: String,
         icon: BuybackIconKind,
-        field: CalculatorField,
         keyboardType: UIKeyboardType = .decimalPad,
         isDisabled: Bool = false
     ) -> some View {
@@ -1118,7 +1265,6 @@ struct ContentView: View {
         text: Binding<String>,
         suffix: String,
         icon: BuybackIconKind,
-        field: CalculatorField,
         isDisabled: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -1173,8 +1319,8 @@ struct ContentView: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                decimalField("Shares", text: lot.sharesText, suffix: "sh", icon: .shares, field: .lotShares)
-                decimalField("Basis", text: lot.basisText, suffix: activeCurrencyCode, icon: .basis, field: .lotBasis)
+                decimalField("Shares", text: lot.sharesText, suffix: "sh", icon: .shares)
+                decimalField("Basis", text: lot.basisText, suffix: activeCurrencyCode, icon: .basis)
             }
         }
         .padding(.horizontal, 11)
@@ -1219,7 +1365,7 @@ struct ContentView: View {
 
             iconActionButton(
                 icon: .refresh,
-                tint: LiquidPalette.accent,
+                role: .accent,
                 accessibilityLabel: "Refresh selected price",
                 isDisabled: lookup.selectedAsset == nil || lookup.isFetchingQuote
             ) {
@@ -1228,7 +1374,7 @@ struct ContentView: View {
 
             iconActionButton(
                 icon: .alertArmed,
-                tint: LiquidPalette.muted,
+                role: .muted,
                 accessibilityLabel: "Arm alert at buy-back limit"
             ) {
                 alertPriceText = calculation.maximumBuybackPrice.inputString
@@ -1242,7 +1388,7 @@ struct ContentView: View {
 
             iconActionButton(
                 icon: .bookmark,
-                tint: LiquidPalette.muted,
+                role: .muted,
                 accessibilityLabel: "Freeze current sell price"
             ) {
                 freezeCurrentScenario(calculation)
@@ -1250,7 +1396,7 @@ struct ContentView: View {
 
             iconActionButton(
                 icon: .save,
-                tint: LiquidPalette.accent,
+                role: .accent,
                 accessibilityLabel: "Save current scenario"
             ) {
                 saveScenario(calculation)
@@ -1262,39 +1408,94 @@ struct ContentView: View {
 
     private func iconActionButton(
         icon: BuybackIconKind,
-        tint: Color,
+        role: LiquidIconButtonRole,
         accessibilityLabel: String,
         isDisabled: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        NativeGlassIconButton(
-            symbol: icon.systemSymbolName,
-            tint: tint,
-            accessibilityLabel: accessibilityLabel,
-            isDisabled: isDisabled,
-            action: action
-        )
+        Button {
+            guard !isDisabled else { return }
+            action()
+        } label: {
+            LiquidIconButton(
+                icon: icon,
+                role: role,
+                prominence: .action,
+                isDisabled: isDisabled
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(isDisabled ? "Unavailable" : "")
     }
 
     private func dockIconButton(
         action dockAction: DockAction,
         icon: BuybackIconKind,
-        tint: Color,
+        role: LiquidIconButtonRole,
         accessibilityLabel: String,
         isDisabled: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        NativeGlassIconButton(
-            symbol: icon.systemSymbolName,
-            tint: tint,
-            accessibilityLabel: accessibilityLabel,
-            size: 44,
-            isSelected: selectedDockAction == dockAction,
-            isDisabled: isDisabled
-        ) {
+        let isSelected = selectedDockAction == dockAction
+
+        return Button {
+            guard !isDisabled else { return }
             selectDockAction(dockAction)
             action()
+        } label: {
+            ZStack {
+                if isSelected {
+                    dockSelectionLens(role: role)
+                }
+
+                LiquidIconButton(
+                    icon: icon,
+                    role: role,
+                    size: 44,
+                    glyphSize: 24,
+                    prominence: .dock,
+                    isSelected: isSelected,
+                    isDisabled: isDisabled
+                )
+
+                dockGlyph(icon: icon, isDisabled: isDisabled)
+            }
+            .frame(width: 52, height: 52)
+            .contentShape(Circle())
         }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(isDisabled ? "Unavailable" : (isSelected ? "Selected" : ""))
+    }
+
+    private func dockGlyph(icon: BuybackIconKind, isDisabled: Bool) -> some View {
+        BuybackIcon(icon, tint: Color.white.opacity(isDisabled ? 0.90 : 1), lineScale: isDisabled ? 1.65 : 1.55)
+            .frame(width: 24, height: 24)
+            .shadow(color: Color.black.opacity(isDisabled ? 0.32 : 0.50), radius: 2.2, y: 1.0)
+            .compositingGroup()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private func dockSelectionLens(role: LiquidIconButtonRole) -> some View {
+        let shape = Circle()
+        let tint = role.tint
+
+        return shape
+            .fill(.ultraThinMaterial)
+            .overlay {
+                shape.fill(tint.opacity(0.070))
+            }
+            .glassEffect(.regular.tint(tint.opacity(0.115)).interactive(), in: shape)
+            .overlay {
+                shape.strokeBorder(.white.opacity(0.46), lineWidth: 1.1)
+            }
+            .frame(width: 51, height: 51)
+            .shadow(color: .black.opacity(0.115), radius: 13, y: 5)
+            .matchedGeometryEffect(id: "dockSelectionLens", in: dockSelectionNamespace)
     }
 
     private func positionBreakdown(_ calculation: BuybackCalculation) -> some View {
@@ -1589,8 +1790,7 @@ struct ContentView: View {
                     "Alert price",
                     text: $alertPriceText,
                     suffix: calculation.currencyCode,
-                    icon: .alert,
-                    field: .alertPrice
+                    icon: .alert
                 )
 
                 Button {
@@ -1694,6 +1894,15 @@ struct ContentView: View {
         }
 
         return .warning("Live autocomplete and prices need a Finnhub key.")
+    }
+
+    private func setTargetExtraSharesPercent(_ value: Double) {
+        let roundedValue = max(0, (value * 10).rounded() / 10)
+        targetExtraText = roundedValue.inputString
+    }
+
+    private func adjustTargetExtraSharesPercent(by delta: Double) {
+        setTargetExtraSharesPercent(normalizedTargetExtraSharesPercent + delta)
     }
 
     private var validationMessage: String {
@@ -2384,100 +2593,6 @@ private struct EditableTaxLot: Identifiable, Equatable {
     }
 }
 
-private enum CalculatorField: Hashable {
-    case asset
-    case price
-    case gain
-    case shares
-    case taxRate
-    case taxCurrency
-    case fxRate
-    case targetExtra
-    case sellFee
-    case buyFee
-    case slippage
-    case lotShares
-    case lotBasis
-    case lot1Shares
-    case lot1Basis
-    case lot2Shares
-    case lot2Basis
-    case lot3Shares
-    case lot3Basis
-    case alertPrice
-    case finnhubKey
-    case openFIGIKey
-}
-
-private extension BuybackIconKind {
-    var systemSymbolName: String {
-        switch self {
-        case .appMark:
-            return "arrow.trianglehead.2.clockwise.rotate.90"
-        case .settings:
-            return "gearshape.fill"
-        case .keySettings, .key, .apiKey:
-            return "key.fill"
-        case .refresh:
-            return "arrow.clockwise"
-        case .asset, .lookupText, .market:
-            return "magnifyingglass"
-        case .live:
-            return "dot.radiowaves.left.and.right"
-        case .save:
-            return "square.and.arrow.down"
-        case .clear:
-            return "xmark"
-        case .calculator:
-            return "apps.iphone"
-        case .edit:
-            return "pencil"
-        case .taxProfile, .tax, .taxRate:
-            return "percent"
-        case .taxCurrency, .cash, .buybackCash:
-            return "dollarsign"
-        case .lots:
-            return "list.bullet.rectangle"
-        case .sliders:
-            return "slider.horizontal.3"
-        case .price, .limit:
-            return "tag.fill"
-        case .percent:
-            return "percent"
-        case .shares:
-            return "square.stack.3d.up.fill"
-        case .fx:
-            return "arrow.left.arrow.right"
-        case .target, .selected:
-            return "target"
-        case .slippage, .drop:
-            return "arrow.down.right"
-        case .sellFee, .buyFee, .costs:
-            return "creditcard.fill"
-        case .basis:
-            return "chart.bar.xaxis"
-        case .sensitivity:
-            return "chart.line.uptrend.xyaxis"
-        case .scenarios, .bookmark:
-            return "rectangle.stack.fill"
-        case .alert, .alertArmed:
-            return "bell.badge.fill"
-        case .alertOff:
-            return "bell.slash.fill"
-        case .widget:
-            return "rectangle.grid.2x2.fill"
-        case .toggleOff:
-            return "circle"
-        case .warning:
-            return "exclamationmark.triangle.fill"
-        case .info:
-            return "info.circle.fill"
-        case .chevron:
-            return "chevron.down"
-        }
-    }
-}
-
 private struct TopChromeBlurBackground: View {
     let progress: Double
 
@@ -2509,41 +2624,6 @@ private struct TopChromeBlurBackground: View {
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-    }
-}
-
-private struct NativeGlassIconButton: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    let symbol: String
-    let tint: Color
-    let accessibilityLabel: String
-    var size: CGFloat = 52
-    var isSelected = false
-    var isDisabled = false
-    let action: () -> Void
-
-    var body: some View {
-        Button {
-            guard !isDisabled else { return }
-            action()
-        } label: {
-            ZStack {
-                Image(systemName: symbol)
-                    .font(.system(size: size * 0.36, weight: .semibold))
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(.white.opacity(isDisabled ? 0.58 : 0.96))
-                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.18), radius: 1.2, y: 0.8)
-            }
-            .frame(width: size, height: size)
-            .contentShape(Circle())
-            .scaleEffect(isSelected ? 1.018 : 1.0)
-        }
-        .buttonStyle(.glass(.regular.tint(LiquidPalette.glassTint.opacity(reduceTransparency ? 0.15 : 0.096)).interactive()))
-        .tint(LiquidPalette.accent)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityValue(isDisabled ? "Unavailable" : (isSelected ? "Selected" : ""))
     }
 }
 
