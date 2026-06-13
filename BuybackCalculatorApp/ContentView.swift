@@ -606,8 +606,8 @@ struct ContentView: View {
 
     private var topChromeBlurOverlay: some View {
         TopChromeBlurBackground(progress: topChromeBlurProgress)
-            .frame(height: 300)
-            .offset(y: -24)
+            .frame(height: 210)
+            .offset(y: -20)
             .ignoresSafeArea(edges: .top)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
@@ -2637,8 +2637,8 @@ private struct TopChromeBlurBackground: View {
                 LinearGradient(
                     stops: [
                         .init(color: .black, location: 0),
-                        .init(color: .black, location: 0.68),
-                        .init(color: .black.opacity(0.82), location: 0.86),
+                        .init(color: .black, location: 0.52),
+                        .init(color: .black.opacity(0.72), location: 0.72),
                         .init(color: .clear, location: 1)
                     ],
                     startPoint: .top,
