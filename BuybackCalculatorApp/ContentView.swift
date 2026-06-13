@@ -292,6 +292,7 @@ struct ContentView: View {
                     updateTopChromeBlurProgress(offset)
                 }
 
+                topChromeBlurOverlay
                 topNavigationChrome
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -564,50 +565,58 @@ struct ContentView: View {
     }
 
     private var topNavigationChrome: some View {
-        ZStack {
-            TopChromeBlurBackground(progress: topChromeBlurProgress)
-                .frame(maxWidth: 760)
-                .frame(height: 68)
-                .padding(.horizontal, 14)
-                .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
-                .opacity(topChromeBlurProgress)
-
-            HStack(alignment: .center) {
-                Button {
-                    selectDockAction(.settings)
-                    activeSheet = .settings
-                } label: {
-                    LiquidToolbarIcon(icon: .keySettings, controlSize: 46)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Settings")
-
-                Spacer(minLength: 12)
-
-                Text("Buy-Back")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-
-                Spacer(minLength: 12)
-
-                Button {
-                    refreshSelectedQuote()
-                } label: {
-                    LiquidToolbarIcon(icon: .refresh, controlSize: 46)
-                }
-                .buttonStyle(.plain)
-                .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
-                .accessibilityLabel("Refresh price")
+        HStack(alignment: .center) {
+            Button {
+                selectDockAction(.settings)
+                activeSheet = .settings
+            } label: {
+                LiquidToolbarIcon(icon: .keySettings, controlSize: 46)
             }
-            .frame(maxWidth: 760)
-            .padding(.horizontal, 22)
-            .padding(.top, 8)
-            .padding(.bottom, 8)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
+
+            Spacer(minLength: 12)
+
+            Text("Buy-Back")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+
+            Spacer(minLength: 12)
+
+            Button {
+                refreshSelectedQuote()
+            } label: {
+                LiquidToolbarIcon(icon: .refresh, controlSize: 46)
+            }
+            .buttonStyle(.plain)
+            .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
+            .accessibilityLabel("Refresh price")
         }
+        .frame(maxWidth: 760)
+        .padding(.horizontal, 22)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .top)
         .zIndex(10)
+    }
+
+    private var topChromeBlurOverlay: some View {
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                TopChromeBlurBackground(progress: topChromeBlurProgress)
+                    .frame(height: max(96, proxy.safeAreaInsets.top + 72))
+                    .clipped()
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(edges: .top)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .zIndex(9)
     }
 
     private func updateTopChromeBlurProgress(_ offset: CGFloat) {
@@ -2602,7 +2611,7 @@ private struct TopChromeBlurBackground: View {
 
     var body: some View {
         let normalizedProgress = min(max(progress, 0), 1)
-        let materialOpacity = min(1, normalizedProgress * 0.82)
+        let materialOpacity = min(1, normalizedProgress * 0.74)
 
         ZStack(alignment: .bottom) {
             Rectangle()
@@ -2610,12 +2619,12 @@ private struct TopChromeBlurBackground: View {
                 .opacity(materialOpacity)
 
             Rectangle()
-                .fill(Color(uiColor: .systemBackground).opacity(0.16 * normalizedProgress))
+                .fill(Color(uiColor: .systemBackground).opacity(0.10 * normalizedProgress))
 
             LinearGradient(
                 colors: [
-                    Color.white.opacity(0.16 * normalizedProgress),
-                    LiquidPalette.glassTint.opacity(0.055 * normalizedProgress),
+                    Color.white.opacity(0.12 * normalizedProgress),
+                    LiquidPalette.glassTint.opacity(0.035 * normalizedProgress),
                     Color.clear
                 ],
                 startPoint: .top,
@@ -2623,7 +2632,7 @@ private struct TopChromeBlurBackground: View {
             )
 
             Rectangle()
-                .fill(Color.white.opacity(0.16 * normalizedProgress))
+                .fill(Color.white.opacity(0.12 * normalizedProgress))
                 .frame(height: 0.7)
                 .blur(radius: 0.6)
                 .opacity(normalizedProgress)
@@ -2632,8 +2641,8 @@ private struct TopChromeBlurBackground: View {
                 LinearGradient(
                     stops: [
                         .init(color: .black, location: 0),
-                        .init(color: .black, location: 0.46),
-                        .init(color: .black.opacity(0.62), location: 0.66),
+                        .init(color: .black, location: 0.68),
+                        .init(color: .black.opacity(0.72), location: 0.84),
                         .init(color: .clear, location: 1)
                     ],
                     startPoint: .top,
