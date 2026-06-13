@@ -94,6 +94,7 @@ struct ContentView: View {
     @State private var freezeCurrencyCode = BuybackCalculator.defaultCurrencyCode
     @State private var freezeQuoteTimestamp: Date?
     @State private var topChromeBlurProgress = 0.0
+    @State private var topChromeScrollOrigin: CGFloat?
     @Namespace private var dockSelectionNamespace
     @FocusState private var assetLookupFieldFocused: Bool
 
@@ -575,7 +576,7 @@ struct ContentView: View {
         GeometryReader { proxy in
             Color.clear.preference(
                 key: TopChromeOffsetPreferenceKey.self,
-                value: proxy.frame(in: .named("buybackMainScroll")).minY
+                value: proxy.frame(in: .global).minY
             )
         }
         .frame(height: 0)
@@ -628,8 +629,17 @@ struct ContentView: View {
     }
 
     private func updateTopChromeBlurProgress(_ offset: CGFloat) {
-        let scrolledDistance = max(0, -offset)
-        let progress = min(1, Double(scrolledDistance / 34))
+        if let origin = topChromeScrollOrigin {
+            if offset > origin {
+                topChromeScrollOrigin = offset
+            }
+        } else {
+            topChromeScrollOrigin = offset
+        }
+
+        let origin = topChromeScrollOrigin ?? offset
+        let scrolledDistance = max(0, origin - offset)
+        let progress = min(1, Double(scrolledDistance / 28))
 
         guard abs(progress - topChromeBlurProgress) > 0.015 else { return }
 
@@ -2624,16 +2634,17 @@ private struct TopChromeBlurBackground: View {
 
         ZStack(alignment: .bottom) {
             Rectangle()
-                .fill(.regularMaterial)
+                .fill(.thickMaterial)
                 .opacity(materialOpacity)
 
             Rectangle()
-                .fill(Color(uiColor: .systemBackground).opacity(0.18 * normalizedProgress))
+                .fill(Color(uiColor: .systemBackground).opacity(0.42 * normalizedProgress))
 
             LinearGradient(
                 colors: [
-                    Color.white.opacity(0.24 * normalizedProgress),
-                    LiquidPalette.glassTint.opacity(0.065 * normalizedProgress),
+                    Color.white.opacity(0.34 * normalizedProgress),
+                    LiquidPalette.glassTint.opacity(0.10 * normalizedProgress),
+                    Color(uiColor: .systemBackground).opacity(0.10 * normalizedProgress),
                     Color.clear
                 ],
                 startPoint: .top,
@@ -2641,7 +2652,7 @@ private struct TopChromeBlurBackground: View {
             )
 
             Rectangle()
-                .fill(Color.white.opacity(0.20 * normalizedProgress))
+                .fill(Color.white.opacity(0.26 * normalizedProgress))
                 .frame(height: 0.7)
                 .blur(radius: 0.6)
                 .opacity(normalizedProgress)
