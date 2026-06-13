@@ -201,47 +201,48 @@ private enum WidgetMetrics {
     static func contentPadding(for family: WidgetFamily) -> EdgeInsets {
         switch family {
         case .systemSmall:
-            EdgeInsets(top: 13, leading: 13, bottom: 13, trailing: 13)
+            EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14)
         case .systemLarge:
             EdgeInsets(top: 18, leading: 18, bottom: 18, trailing: 18)
         default:
-            EdgeInsets(top: 15, leading: 15, bottom: 15, trailing: 15)
+            EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
         }
     }
 
     static func surfaceRadius(for family: WidgetFamily) -> CGFloat {
         switch family {
         case .systemSmall:
-            return 15
-        case .systemLarge:
-            return 20
-        default:
             return 18
+        case .systemLarge:
+            return 24
+        default:
+            return 21
         }
     }
 
     static func pillRadius(for family: WidgetFamily) -> CGFloat {
         switch family {
         case .systemSmall:
-            return 12
-        case .systemLarge:
-            return 15
-        default:
             return 14
+        case .systemLarge:
+            return 18
+        default:
+            return 16
         }
     }
 
-    static func iconBubbleSize(compact: Bool) -> CGFloat {
-        compact ? 30 : 34
+    static func iconSurfaceRadius(for size: CGFloat) -> CGFloat {
+        max(11, size * 0.36)
     }
 
-    static func iconSize(compact: Bool) -> CGFloat {
-        compact ? 20 : 22
+    static func iconBubbleSize(compact: Bool) -> CGFloat {
+        compact ? 31 : 35
     }
 }
 
 private struct WidgetGlassSurface: ViewModifier {
     @Environment(\.widgetRenderingMode) private var renderingMode
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     let tint: Color
     let radius: CGFloat
@@ -250,18 +251,29 @@ private struct WidgetGlassSurface: ViewModifier {
     let strokeOpacity: Double
 
     func body(content: Content) -> some View {
+        let fullColor = renderingMode == .fullColor
+        let resolvedTint = fullColor ? tint : WidgetTint.glass
+        let contrastBoost = colorSchemeContrast == .increased ? 0.035 : 0
+        let resolvedFillOpacity = fullColor ? min(fillOpacity + contrastBoost, 0.22) : min(fillOpacity, 0.065)
+        let resolvedGlassOpacity = fullColor ? min(glassTintOpacity + contrastBoost, 0.26) : 0.04
+        let resolvedStrokeOpacity = fullColor ? min(strokeOpacity + contrastBoost, 0.24) : 0.10
+
         content
             .background {
                 let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
                 shape
-                    .fill(WidgetTint.glass.opacity(renderingMode == .fullColor ? fillOpacity : min(fillOpacity, 0.06)))
+                    .fill(resolvedTint.opacity(resolvedFillOpacity))
                     .glassEffect(
-                        .regular.tint(WidgetTint.glass.opacity(renderingMode == .fullColor ? glassTintOpacity : 0.035)),
+                        .regular.tint(resolvedTint.opacity(resolvedGlassOpacity)),
                         in: shape
                     )
                     .overlay {
-                        shape.stroke(.white.opacity(renderingMode == .fullColor ? strokeOpacity : 0.08), lineWidth: 0.7)
+                        shape.stroke(.white.opacity(resolvedStrokeOpacity), lineWidth: 0.75)
                     }
+                    .overlay {
+                        shape.stroke(resolvedTint.opacity(fullColor ? 0.075 : 0.035), lineWidth: 0.55)
+                    }
+                    .shadow(color: resolvedTint.opacity(fullColor ? 0.045 : 0), radius: 8, x: 0, y: 4)
             }
     }
 }
@@ -272,9 +284,15 @@ private enum WidgetTint {
     static let muted = Color(red: 0.43, green: 0.48, blue: 0.54)
 }
 
+private enum WidgetIconProminence {
+    case decorative
+    case status
+    case action
+}
+
 private extension View {
     func widgetGlassSurface(
-        tint: Color = .primary,
+        tint: Color = WidgetTint.glass,
         radius: CGFloat,
         fillOpacity: Double = 0.07,
         glassTintOpacity: Double = 0.08,
@@ -852,9 +870,12 @@ struct BuybackWidgetEntryView: View {
 
     private var invalidView: some View {
         VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 12) {
-            BuybackIcon(.warning, tint: WidgetTint.muted)
-                .frame(width: family == .systemSmall ? 24 : 30, height: family == .systemSmall ? 24 : 30)
-                .widgetAccentable()
+            WidgetIconSurface(
+                icon: .warning,
+                tint: WidgetTint.muted,
+                size: family == .systemSmall ? 31 : 36,
+                prominence: .status
+            )
 
             Text("Check widget inputs")
                 .font(family == .systemSmall ? .headline : .title3.weight(.bold))
@@ -908,7 +929,12 @@ struct BuybackPortfolioWidgetEntryView: View {
 
     private var emptyView: some View {
         VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 11) {
-            LiquidWidgetIcon(icon: .widget, tint: WidgetTint.accent, size: family == .systemSmall ? 30 : 36)
+            WidgetIconSurface(
+                icon: .widget,
+                tint: WidgetTint.accent,
+                size: family == .systemSmall ? 30 : 36,
+                prominence: .decorative
+            )
 
             Text("Save assets")
                 .font(family == .systemSmall ? .headline.weight(.bold) : .title3.weight(.bold))
@@ -966,7 +992,12 @@ private struct PortfolioWidgetHeader: View {
 
     var body: some View {
         HStack(spacing: 9) {
-            LiquidWidgetIcon(icon: .asset, tint: WidgetTint.accent, size: family == .systemSmall ? 27 : 31)
+            WidgetIconSurface(
+                icon: .asset,
+                tint: WidgetTint.accent,
+                size: family == .systemSmall ? 29 : 33,
+                prominence: .decorative
+            )
 
             VStack(alignment: .leading, spacing: 0) {
                 Text("Portfolio")
@@ -1037,15 +1068,12 @@ private struct PortfolioAssetRow: View {
 
     var body: some View {
         HStack(spacing: compact ? 7 : 9) {
-            BuybackIcon(rowIcon, tint: tint)
-                .frame(width: compact ? 17 : 19, height: compact ? 17 : 19)
-                .widgetAccentable()
-                .frame(width: compact ? 27 : 31, height: compact ? 27 : 31)
-                .background {
-                    Circle()
-                        .fill(WidgetTint.glass.opacity(renderingMode == .fullColor ? 0.065 : 0.045))
-                        .glassEffect(.regular.tint(WidgetTint.glass.opacity(0.085)), in: Circle())
-                }
+            WidgetIconSurface(
+                icon: rowIcon,
+                tint: tint,
+                size: compact ? 29 : 33,
+                prominence: .status
+            )
 
             VStack(alignment: .leading, spacing: compact ? 0 : 1) {
                 Text(row.symbol)
@@ -1066,15 +1094,12 @@ private struct PortfolioAssetRow: View {
 
             if let freezeIntent {
                 Button(intent: freezeIntent) {
-                    BuybackIcon(.bookmark, tint: renderingMode == .fullColor ? WidgetTint.muted : .primary)
-                        .frame(width: compact ? 15 : 17, height: compact ? 15 : 17)
-                        .widgetAccentable()
-                        .frame(width: compact ? 27 : 30, height: compact ? 27 : 30)
-                        .background {
-                            Circle()
-                                .fill(WidgetTint.glass.opacity(renderingMode == .fullColor ? 0.065 : 0.045))
-                                .glassEffect(.regular.tint(WidgetTint.glass.opacity(0.085)), in: Circle())
-                        }
+                    WidgetIconSurface(
+                        icon: .bookmark,
+                        tint: WidgetTint.muted,
+                        size: compact ? 29 : 32,
+                        prominence: .action
+                    )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Freeze \(row.symbol)")
@@ -1187,8 +1212,7 @@ private struct PortfolioWidgetFooter: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            BuybackIcon(.live, tint: WidgetTint.muted)
-                .frame(width: 12, height: 12)
+            WidgetIconSurface(icon: .live, tint: WidgetTint.muted, size: 20, prominence: .decorative)
 
             Text("Freeze uses latest widget quote; alerts are checked in app")
                 .font(.caption2.weight(.semibold))
@@ -1200,21 +1224,84 @@ private struct PortfolioWidgetFooter: View {
     }
 }
 
-private struct LiquidWidgetIcon: View {
+private struct WidgetIconSurface: View {
+    @Environment(\.widgetRenderingMode) private var renderingMode
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
     let icon: BuybackIconKind
     let tint: Color
     let size: CGFloat
+    let prominence: WidgetIconProminence
 
     var body: some View {
-        BuybackIcon(icon, tint: tint)
-            .frame(width: size * 0.58, height: size * 0.58)
+        let fullColor = renderingMode == .fullColor
+        let contrastBoost = colorSchemeContrast == .increased ? 0.045 : 0
+        let resolvedTint = fullColor ? tint : WidgetTint.glass
+        let fillOpacity = min(baseFillOpacity + contrastBoost, 0.34)
+        let glassOpacity = min(baseGlassOpacity + contrastBoost, 0.34)
+        let shape = RoundedRectangle(cornerRadius: WidgetMetrics.iconSurfaceRadius(for: size), style: .continuous)
+
+        BuybackIcon(icon, tint: fullColor ? .white : .primary)
+            .frame(width: size * glyphScale, height: size * glyphScale)
+            .shadow(color: .black.opacity(fullColor ? 0.22 : 0), radius: 1, x: 0, y: 0.7)
             .widgetAccentable()
             .frame(width: size, height: size)
             .background {
-                Circle()
-                    .fill(WidgetTint.glass.opacity(0.065))
-                    .glassEffect(.regular.tint(WidgetTint.glass.opacity(0.085)), in: Circle())
+                shape
+                    .fill(resolvedTint.opacity(fillOpacity))
+                    .glassEffect(.regular.tint(resolvedTint.opacity(glassOpacity)), in: shape)
+                    .overlay {
+                        shape.stroke(.white.opacity(fullColor ? 0.24 : 0.10), lineWidth: 0.8)
+                    }
+                    .overlay {
+                        shape.stroke(resolvedTint.opacity(fullColor ? 0.12 : 0.04), lineWidth: 0.55)
+                    }
+                    .shadow(color: resolvedTint.opacity(fullColor ? shadowOpacity : 0), radius: 10, x: 0, y: 5)
             }
+    }
+
+    private var glyphScale: CGFloat {
+        switch prominence {
+        case .decorative:
+            return 0.56
+        case .status:
+            return 0.58
+        case .action:
+            return 0.54
+        }
+    }
+
+    private var baseFillOpacity: Double {
+        switch prominence {
+        case .decorative:
+            return 0.16
+        case .status:
+            return 0.22
+        case .action:
+            return 0.26
+        }
+    }
+
+    private var baseGlassOpacity: Double {
+        switch prominence {
+        case .decorative:
+            return 0.15
+        case .status:
+            return 0.19
+        case .action:
+            return 0.23
+        }
+    }
+
+    private var shadowOpacity: Double {
+        switch prominence {
+        case .decorative:
+            return 0.045
+        case .status:
+            return 0.060
+        case .action:
+            return 0.075
+        }
     }
 }
 
@@ -1224,15 +1311,12 @@ private struct WidgetHeader: View {
 
     var body: some View {
         HStack(spacing: compact ? 7 : 9) {
-            BuybackIcon(entry.priceStatus.icon, tint: statusTint)
-                .widgetAccentable()
-                .frame(width: WidgetMetrics.iconSize(compact: compact), height: WidgetMetrics.iconSize(compact: compact))
-                .frame(width: WidgetMetrics.iconBubbleSize(compact: compact), height: WidgetMetrics.iconBubbleSize(compact: compact))
-                .background {
-                    Circle()
-                        .fill(WidgetTint.glass.opacity(0.065))
-                        .glassEffect(.regular.tint(WidgetTint.glass.opacity(0.085)), in: Circle())
-                }
+            WidgetIconSurface(
+                icon: entry.priceStatus.icon,
+                tint: statusTint,
+                size: WidgetMetrics.iconBubbleSize(compact: compact),
+                prominence: .status
+            )
 
             VStack(alignment: .leading, spacing: compact ? 0 : 1) {
                 Text(entry.symbol.isEmpty ? "Stock" : entry.symbol)
