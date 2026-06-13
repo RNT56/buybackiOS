@@ -6,13 +6,18 @@ final class APIKeySettingsViewModel: ObservableObject {
     @Published var finnhubAPIKey = ""
     @Published var openFIGIAPIKey = ""
     @Published var statusMessage: String?
+    @Published var isWorking = false
+    @Published private(set) var savedFinnhubAPIKey = ""
+    @Published private(set) var savedOpenFIGIAPIKey = ""
 
     var effectiveFinnhubAPIKey: String? {
         MarketDataClientFactory.sanitizedAPIKey(finnhubAPIKey)
+            ?? MarketDataClientFactory.sanitizedAPIKey(savedFinnhubAPIKey)
     }
 
     var effectiveOpenFIGIAPIKey: String? {
         MarketDataClientFactory.sanitizedAPIKey(openFIGIAPIKey)
+            ?? MarketDataClientFactory.sanitizedAPIKey(savedOpenFIGIAPIKey)
     }
 
     var validationMessage: String? {
@@ -28,7 +33,7 @@ final class APIKeySettingsViewModel: ObservableObject {
     }
 
     var canSave: Bool {
-        validationMessage == nil
+        validationMessage == nil && !isWorking
     }
 
     var hasRuntimeFinnhubAPIKey: Bool {
@@ -43,14 +48,12 @@ final class APIKeySettingsViewModel: ObservableObject {
         hasRuntimeFinnhubAPIKey || hasBundledFinnhubAPIKey
     }
 
-    func load() {
-        do {
-            finnhubAPIKey = try APIKeyStore.string(for: .finnhub) ?? ""
-            openFIGIAPIKey = try APIKeyStore.string(for: .openFIGI) ?? ""
-            statusMessage = nil
-        } catch {
-            statusMessage = error.localizedDescription
+    var hasUnsavedFinnhubAPIKey: Bool {
+        guard let draftKey = MarketDataClientFactory.sanitizedAPIKey(finnhubAPIKey) else {
+            return false
         }
+
+        return draftKey != MarketDataClientFactory.sanitizedAPIKey(savedFinnhubAPIKey)
     }
 
     func loadAsync() async {
@@ -70,32 +73,75 @@ final class APIKeySettingsViewModel: ObservableObject {
             }
         }.value
 
-        finnhubAPIKey = loadedKeys.finnhubAPIKey
-        openFIGIAPIKey = loadedKeys.openFIGIAPIKey
+        applyLoadedKeys(
+            finnhubAPIKey: loadedKeys.finnhubAPIKey,
+            openFIGIAPIKey: loadedKeys.openFIGIAPIKey
+        )
         statusMessage = loadedKeys.errorMessage
     }
 
-    func save() {
+    func saveAsync() async {
+        let validatedFinnhubKey: String?
+        let validatedOpenFIGIKey: String?
+
         do {
-            let validatedFinnhubKey = try APIKeyValidator.validatedAPIKey(finnhubAPIKey, for: .finnhub)
-            let validatedOpenFIGIKey = try APIKeyValidator.validatedAPIKey(openFIGIAPIKey, for: .openFIGI)
-            try APIKeyStore.set(validatedFinnhubKey, for: .finnhub)
-            try APIKeyStore.set(validatedOpenFIGIKey, for: .openFIGI)
-            load()
-            statusMessage = "API keys saved securely in Keychain."
+            validatedFinnhubKey = try APIKeyValidator.validatedAPIKey(finnhubAPIKey, for: .finnhub)
+            validatedOpenFIGIKey = try APIKeyValidator.validatedAPIKey(openFIGIAPIKey, for: .openFIGI)
         } catch {
             statusMessage = error.localizedDescription
+            return
         }
+
+        isWorking = true
+        let result = await Task.detached(priority: .utility) {
+            do {
+                try APIKeyStore.set(validatedFinnhubKey, for: .finnhub)
+                try APIKeyStore.set(validatedOpenFIGIKey, for: .openFIGI)
+                return nil as String?
+            } catch {
+                return error.localizedDescription
+            }
+        }.value
+        isWorking = false
+
+        if let result {
+            statusMessage = result
+            return
+        }
+
+        applyLoadedKeys(
+            finnhubAPIKey: validatedFinnhubKey ?? "",
+            openFIGIAPIKey: validatedOpenFIGIKey ?? ""
+        )
+        statusMessage = "API keys saved securely in Keychain."
     }
 
-    func clear() {
-        do {
-            try APIKeyStore.delete(.finnhub)
-            try APIKeyStore.delete(.openFIGI)
-            load()
-            statusMessage = "API keys cleared."
-        } catch {
-            statusMessage = error.localizedDescription
+    func clearAsync() async {
+        isWorking = true
+        let result = await Task.detached(priority: .utility) {
+            do {
+                try APIKeyStore.delete(.finnhub)
+                try APIKeyStore.delete(.openFIGI)
+                return nil as String?
+            } catch {
+                return error.localizedDescription
+            }
+        }.value
+        isWorking = false
+
+        if let result {
+            statusMessage = result
+            return
         }
+
+        applyLoadedKeys(finnhubAPIKey: "", openFIGIAPIKey: "")
+        statusMessage = "API keys cleared."
+    }
+
+    private func applyLoadedKeys(finnhubAPIKey: String, openFIGIAPIKey: String) {
+        savedFinnhubAPIKey = finnhubAPIKey
+        savedOpenFIGIAPIKey = openFIGIAPIKey
+        self.finnhubAPIKey = finnhubAPIKey
+        self.openFIGIAPIKey = openFIGIAPIKey
     }
 }

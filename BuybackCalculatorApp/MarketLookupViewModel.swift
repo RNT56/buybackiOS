@@ -10,7 +10,7 @@ final class MarketLookupViewModel: ObservableObject {
     @Published var isSearching = false
     @Published var isFetchingQuote = false
 
-    private var client = MarketDataClientFactory.make(includeSavedKeys: true)
+    private var client: CompositeMarketDataClient?
     private var searchCache: [String: CachedSearch] = [:]
     private var quoteCache: [String: CachedQuote] = [:]
     private var searchTask: Task<Void, Never>?
@@ -20,7 +20,7 @@ final class MarketLookupViewModel: ObservableObject {
         client = MarketDataClientFactory.make(
             finnhubAPIKey: finnhubAPIKey,
             openFIGIAPIKey: openFIGIAPIKey,
-            includeSavedKeys: true
+            includeSavedKeys: false
         )
         searchTask?.cancel()
         quoteRequestID = UUID()
@@ -28,6 +28,7 @@ final class MarketLookupViewModel: ObservableObject {
         quoteCache.removeAll(keepingCapacity: true)
         isSearching = false
         isFetchingQuote = false
+        message = nil
     }
 
     func scheduleSearch(query: String) {
@@ -45,6 +46,7 @@ final class MarketLookupViewModel: ObservableObject {
         guard cleanedQuery.normalizedStockSymbol != selectedAsset?.symbol else {
             suggestions = []
             isSearching = false
+            message = nil
             return
         }
 

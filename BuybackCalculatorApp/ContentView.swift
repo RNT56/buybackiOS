@@ -86,6 +86,7 @@ struct ContentView: View {
     @State private var freezeCurrencyCode = BuybackCalculator.defaultCurrencyCode
     @State private var freezeQuoteTimestamp: Date?
     @State private var topChromeBlurProgress = 0.0
+    @State private var apiKeyDraftConfigureTask: Task<Void, Never>?
     @Namespace private var dockSelectionNamespace
     @FocusState private var assetLookupFieldFocused: Bool
 
@@ -286,10 +287,10 @@ struct ContentView: View {
                         .ignoresSafeArea(.container, edges: .bottom)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                    max(0, geometry.contentOffset.y + geometry.contentInsets.top)
-                } action: { _, offset in
-                    updateTopChromeBlurProgress(offset)
+                .onScrollGeometryChange(for: Double.self) { geometry in
+                    topChromeBlurProgress(for: max(0, geometry.contentOffset.y + geometry.contentInsets.top))
+                } action: { _, progress in
+                    updateTopChromeBlurProgress(progress)
                 }
 
                 topChromeBlurOverlay
@@ -334,6 +335,12 @@ struct ContentView: View {
                 return
             }
             taxRateText = profile.defaultTaxRatePercent.inputString
+        }
+        .onChange(of: apiKeys.finnhubAPIKey) { _, _ in
+            scheduleAPIKeyDraftClientRefresh()
+        }
+        .onChange(of: apiKeys.openFIGIAPIKey) { _, _ in
+            scheduleAPIKeyDraftClientRefresh()
         }
         .onOpenURL { url in
             handleDeepLink(url)
@@ -619,14 +626,14 @@ struct ContentView: View {
         .zIndex(9)
     }
 
-    private func updateTopChromeBlurProgress(_ offset: CGFloat) {
+    private func topChromeBlurProgress(for offset: CGFloat) -> Double {
         let progress = min(1, Double(max(0, offset) / 26))
+        return (progress * 10).rounded() / 10
+    }
 
-        guard abs(progress - topChromeBlurProgress) > 0.015 else { return }
-
-        withAnimation(.easeOut(duration: 0.16)) {
-            topChromeBlurProgress = progress
-        }
+    private func updateTopChromeBlurProgress(_ progress: Double) {
+        guard progress != topChromeBlurProgress else { return }
+        topChromeBlurProgress = progress
     }
 
     @ViewBuilder
@@ -875,10 +882,12 @@ struct ContentView: View {
 
                     HStack(spacing: 10) {
                         Button {
-                            apiKeys.save()
-                            configureLookupClient()
-                            lookup.scheduleSearch(query: assetQuery)
-                            WidgetCenter.shared.reloadAllTimelines()
+                            Task { @MainActor in
+                                await apiKeys.saveAsync()
+                                configureLookupClient()
+                                lookup.scheduleSearch(query: assetQuery)
+                                WidgetCenter.shared.reloadAllTimelines()
+                            }
                         } label: {
                             LiquidGlassActionIcon(icon: .save, size: 44)
                                 .frame(maxWidth: .infinity)
@@ -888,15 +897,18 @@ struct ContentView: View {
                         .accessibilityLabel("Save API keys")
 
                         Button(role: .destructive) {
-                            apiKeys.clear()
-                            configureLookupClient()
-                            lookup.scheduleSearch(query: assetQuery)
-                            WidgetCenter.shared.reloadAllTimelines()
+                            Task { @MainActor in
+                                await apiKeys.clearAsync()
+                                configureLookupClient()
+                                lookup.scheduleSearch(query: assetQuery)
+                                WidgetCenter.shared.reloadAllTimelines()
+                            }
                         } label: {
                             LiquidGlassActionIcon(icon: .clear, tint: LiquidPalette.danger, size: 44)
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.plain)
+                        .disabled(apiKeys.isWorking)
                         .accessibilityLabel("Clear API keys")
                     }
 
@@ -1894,8 +1906,16 @@ struct ContentView: View {
     }
 
     private var apiKeyStatusMessage: LookupMessage {
+        if apiKeys.isWorking {
+            return .info("Updating API keys...")
+        }
+
         if let statusMessage = apiKeys.statusMessage {
             return .info(statusMessage)
+        }
+
+        if apiKeys.hasUnsavedFinnhubAPIKey {
+            return .info("Finnhub key entered. Save it to keep live prices after relaunch and update widgets.")
         }
 
         if apiKeys.hasRuntimeFinnhubAPIKey {
@@ -2094,6 +2114,17 @@ struct ContentView: View {
             finnhubAPIKey: apiKeys.effectiveFinnhubAPIKey,
             openFIGIAPIKey: apiKeys.effectiveOpenFIGIAPIKey
         )
+    }
+
+    private func scheduleAPIKeyDraftClientRefresh() {
+        apiKeyDraftConfigureTask?.cancel()
+        guard apiKeys.validationMessage == nil else { return }
+
+        apiKeyDraftConfigureTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            configureLookupClient()
+        }
     }
 
     private func scheduleStartupIfNeeded() {

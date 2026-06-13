@@ -386,10 +386,12 @@ enum MarketDataClientFactory {
         includeSavedKeys: Bool = true,
         bundle: Bundle = .main
     ) -> CompositeMarketDataClient? {
-        let savedFinnhubAPIKey = includeSavedKeys ? try? APIKeyStore.string(for: .finnhub) : nil
-        let savedOpenFIGIAPIKey = includeSavedKeys ? try? APIKeyStore.string(for: .openFIGI) : nil
+        let explicitFinnhubAPIKey = sanitizedAPIKey(finnhubAPIKey)
+        let explicitOpenFIGIAPIKey = sanitizedAPIKey(openFIGIAPIKey)
+        let savedFinnhubAPIKey = explicitFinnhubAPIKey == nil && includeSavedKeys ? try? APIKeyStore.string(for: .finnhub) : nil
+        let savedOpenFIGIAPIKey = explicitOpenFIGIAPIKey == nil && includeSavedKeys ? try? APIKeyStore.string(for: .openFIGI) : nil
 
-        guard let resolvedFinnhubAPIKey = sanitizedAPIKey(finnhubAPIKey)
+        guard let resolvedFinnhubAPIKey = explicitFinnhubAPIKey
             ?? sanitizedAPIKey(savedFinnhubAPIKey)
             ?? apiKey(named: "FINNHUB_API_KEY", bundle: bundle)
         else {
@@ -399,7 +401,7 @@ enum MarketDataClientFactory {
         return CompositeMarketDataClient(
             finnhub: FinnhubMarketDataClient(apiKey: resolvedFinnhubAPIKey),
             openFIGI: OpenFIGIIdentifierResolver(
-                apiKey: sanitizedAPIKey(openFIGIAPIKey)
+                apiKey: explicitOpenFIGIAPIKey
                     ?? sanitizedAPIKey(savedOpenFIGIAPIKey)
                     ?? apiKey(named: "OPENFIGI_API_KEY", bundle: bundle)
             )

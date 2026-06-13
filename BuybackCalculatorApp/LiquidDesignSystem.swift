@@ -447,7 +447,6 @@ struct LiquidGlassIcon: View {
         } else {
             shape
                 .fill(tint.opacity(LiquidControlChrome.iconFillOpacity + (colorSchemeContrast == .increased ? 0.018 : 0)))
-                .glassEffect(.regular.tint(tint.opacity(LiquidControlChrome.iconGlassOpacity)), in: shape)
                 .overlay {
                     shape.strokeBorder(.white.opacity(colorScheme == .dark ? 0.12 : 0.18), lineWidth: 0.7)
                 }

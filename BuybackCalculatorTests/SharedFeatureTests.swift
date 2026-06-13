@@ -401,4 +401,22 @@ final class SharedFeatureTests: XCTestCase {
             XCTAssertTrue(error.localizedDescription.contains("Finnhub API key is invalid"))
         }
     }
+
+    func testMarketDataClientFactoryAcceptsExplicitFinnhubKeyWithoutSavedKeys() {
+        XCTAssertNotNil(
+            MarketDataClientFactory.make(
+                finnhubAPIKey: "finnhub-token_123.abc",
+                openFIGIAPIKey: nil,
+                includeSavedKeys: false
+            )
+        )
+
+        XCTAssertNil(
+            MarketDataClientFactory.make(
+                finnhubAPIKey: "   ",
+                openFIGIAPIKey: nil,
+                includeSavedKeys: false
+            )
+        )
+    }
 }
