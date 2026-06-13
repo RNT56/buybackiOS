@@ -585,8 +585,8 @@ struct ContentView: View {
     private var topNavigationChrome: some View {
         ZStack(alignment: .top) {
             TopChromeBlurBackground(progress: topChromeBlurProgress)
-                .frame(height: 96)
-                .offset(y: -10)
+                .frame(height: 156)
+                .offset(y: -34)
                 .ignoresSafeArea(edges: .top)
 
             HStack(alignment: .center) {
@@ -2619,25 +2619,39 @@ private struct TopChromeBlurBackground: View {
     let progress: Double
 
     var body: some View {
-        Rectangle()
-            .fill(.ultraThinMaterial)
-            .overlay {
-                LinearGradient(
-                    colors: [
-                        LiquidPalette.glassTint.opacity(0.050 * progress),
-                        Color(uiColor: .systemBackground).opacity(0.16 * progress),
-                        Color.clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .opacity(progress)
+        let normalizedProgress = min(max(progress, 0), 1)
+        let materialOpacity = min(1, normalizedProgress * 1.35)
+
+        ZStack(alignment: .bottom) {
+            Rectangle()
+                .fill(.regularMaterial)
+                .opacity(materialOpacity)
+
+            Rectangle()
+                .fill(Color(uiColor: .systemBackground).opacity(0.18 * normalizedProgress))
+
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.24 * normalizedProgress),
+                    LiquidPalette.glassTint.opacity(0.065 * normalizedProgress),
+                    Color.clear
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            Rectangle()
+                .fill(Color.white.opacity(0.20 * normalizedProgress))
+                .frame(height: 0.7)
+                .blur(radius: 0.6)
+                .opacity(normalizedProgress)
+        }
             .mask {
                 LinearGradient(
                     stops: [
                         .init(color: .black, location: 0),
-                        .init(color: .black.opacity(0.94), location: 0.62),
+                        .init(color: .black, location: 0.58),
+                        .init(color: .black.opacity(0.82), location: 0.76),
                         .init(color: .clear, location: 1)
                     ],
                     startPoint: .top,
