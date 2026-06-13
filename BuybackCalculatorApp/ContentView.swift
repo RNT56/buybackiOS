@@ -36,14 +36,6 @@ private enum DetailTab: String, CaseIterable, Identifiable {
     }
 }
 
-private struct TopChromeOffsetPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 struct ContentView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -94,7 +86,6 @@ struct ContentView: View {
     @State private var freezeCurrencyCode = BuybackCalculator.defaultCurrencyCode
     @State private var freezeQuoteTimestamp: Date?
     @State private var topChromeBlurProgress = 0.0
-    @State private var topChromeScrollOrigin: CGFloat?
     @Namespace private var dockSelectionNamespace
     @FocusState private var assetLookupFieldFocused: Bool
 
@@ -278,17 +269,18 @@ struct ContentView: View {
         NavigationStack {
             ZStack(alignment: .top) {
                 ScrollView {
-                    scrollOffsetReader
                     contentLayout
                         .frame(maxWidth: usesSplitLayout ? 1180 : 760, alignment: .leading)
                         .padding(.horizontal, 18)
                         .padding(.top, topChromeScrollPadding)
                         .padding(.bottom, floatingDockScrollPadding)
                 }
-                .coordinateSpace(name: "buybackMainScroll")
                 .background {
                     LiquidGlassBackground()
                         .ignoresSafeArea()
+                }
+                .overlay(alignment: .top) {
+                    topChromeBlurOverlay
                 }
                 .overlay(alignment: .bottom) {
                     launchActionDock(calculation: calculation)
@@ -297,7 +289,9 @@ struct ContentView: View {
                         .ignoresSafeArea(.container, edges: .bottom)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onPreferenceChange(TopChromeOffsetPreferenceKey.self) { offset in
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    max(0, geometry.contentOffset.y + geometry.contentInsets.top)
+                } action: { _, offset in
                     updateTopChromeBlurProgress(offset)
                 }
 
@@ -572,74 +566,56 @@ struct ContentView: View {
         76
     }
 
-    private var scrollOffsetReader: some View {
-        GeometryReader { proxy in
-            Color.clear.preference(
-                key: TopChromeOffsetPreferenceKey.self,
-                value: proxy.frame(in: .global).minY
-            )
-        }
-        .frame(height: 0)
-        .accessibilityHidden(true)
-    }
-
     private var topNavigationChrome: some View {
-        ZStack(alignment: .top) {
-            TopChromeBlurBackground(progress: topChromeBlurProgress)
-                .frame(height: 156)
-                .offset(y: -34)
-                .ignoresSafeArea(edges: .top)
-
-            HStack(alignment: .center) {
-                Button {
-                    selectDockAction(.settings)
-                    activeSheet = .settings
-                } label: {
-                    LiquidToolbarIcon(icon: .keySettings, controlSize: 46)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Settings")
-
-                Spacer(minLength: 12)
-
-                Text("Buy-Back")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-
-                Spacer(minLength: 12)
-
-                Button {
-                    refreshSelectedQuote()
-                } label: {
-                    LiquidToolbarIcon(icon: .refresh, controlSize: 46)
-                }
-                .buttonStyle(.plain)
-                .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
-                .accessibilityLabel("Refresh price")
+        HStack(alignment: .center) {
+            Button {
+                selectDockAction(.settings)
+                activeSheet = .settings
+            } label: {
+                LiquidToolbarIcon(icon: .keySettings, controlSize: 46)
             }
-            .frame(maxWidth: 760)
-            .padding(.horizontal, 22)
-            .padding(.top, 8)
-            .padding(.bottom, 8)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
+
+            Spacer(minLength: 12)
+
+            Text("Buy-Back")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+
+            Spacer(minLength: 12)
+
+            Button {
+                refreshSelectedQuote()
+            } label: {
+                LiquidToolbarIcon(icon: .refresh, controlSize: 46)
+            }
+            .buttonStyle(.plain)
+            .disabled(lookup.selectedAsset == nil || lookup.isFetchingQuote)
+            .accessibilityLabel("Refresh price")
         }
+        .frame(maxWidth: 760)
+        .padding(.horizontal, 22)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .top)
         .zIndex(10)
     }
 
-    private func updateTopChromeBlurProgress(_ offset: CGFloat) {
-        if let origin = topChromeScrollOrigin {
-            if offset > origin {
-                topChromeScrollOrigin = offset
-            }
-        } else {
-            topChromeScrollOrigin = offset
-        }
+    private var topChromeBlurOverlay: some View {
+        TopChromeBlurBackground(progress: topChromeBlurProgress)
+            .frame(height: 300)
+            .offset(y: -24)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .zIndex(9)
+    }
 
-        let origin = topChromeScrollOrigin ?? offset
-        let scrolledDistance = max(0, origin - offset)
-        let progress = min(1, Double(scrolledDistance / 28))
+    private func updateTopChromeBlurProgress(_ offset: CGFloat) {
+        let progress = min(1, Double(max(0, offset) / 26))
 
         guard abs(progress - topChromeBlurProgress) > 0.015 else { return }
 
@@ -2661,8 +2637,8 @@ private struct TopChromeBlurBackground: View {
                 LinearGradient(
                     stops: [
                         .init(color: .black, location: 0),
-                        .init(color: .black, location: 0.58),
-                        .init(color: .black.opacity(0.82), location: 0.76),
+                        .init(color: .black, location: 0.68),
+                        .init(color: .black.opacity(0.82), location: 0.86),
                         .init(color: .clear, location: 1)
                     ],
                     startPoint: .top,
