@@ -270,11 +270,13 @@ struct ContentView: View {
         NavigationStack {
             ZStack(alignment: .top) {
                 ScrollView {
-                    contentLayout
-                        .frame(maxWidth: usesSplitLayout ? 1180 : 760, alignment: .leading)
-                        .padding(.horizontal, 18)
-                        .padding(.top, topChromeScrollPadding)
-                        .padding(.bottom, floatingDockScrollPadding)
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        contentLayout
+                    }
+                    .frame(maxWidth: usesSplitLayout ? 1180 : 760, alignment: .leading)
+                    .padding(.horizontal, 18)
+                    .padding(.top, topChromeScrollPadding)
+                    .padding(.bottom, floatingDockScrollPadding)
                 }
                 .background {
                     LiquidGlassBackground()
@@ -287,6 +289,7 @@ struct ContentView: View {
                         .ignoresSafeArea(.container, edges: .bottom)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(keyboardDismissDragGesture)
                 .onScrollGeometryChange(for: Double.self) { geometry in
                     topChromeBlurProgress(for: max(0, geometry.contentOffset.y + geometry.contentInsets.top))
                 } action: { _, progress in
@@ -378,6 +381,8 @@ struct ContentView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 16)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(keyboardDismissDragGesture)
             .background {
                 LiquidGlassBackground()
                     .ignoresSafeArea()
@@ -408,6 +413,8 @@ struct ContentView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 16)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(keyboardDismissDragGesture)
             .background {
                 LiquidGlassBackground()
                     .ignoresSafeArea()
@@ -460,6 +467,8 @@ struct ContentView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 16)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(keyboardDismissDragGesture)
             .background {
                 LiquidGlassBackground()
                     .ignoresSafeArea()
@@ -511,6 +520,8 @@ struct ContentView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 16)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(keyboardDismissDragGesture)
             .background {
                 LiquidGlassBackground()
                     .ignoresSafeArea()
@@ -627,13 +638,26 @@ struct ContentView: View {
     }
 
     private func topChromeBlurProgress(for offset: CGFloat) -> Double {
-        let progress = min(1, Double(max(0, offset) / 26))
-        return (progress * 10).rounded() / 10
+        let progress = min(1, Double(max(0, offset) / 30))
+        return (progress * 4).rounded() / 4
     }
 
     private func updateTopChromeBlurProgress(_ progress: Double) {
         guard progress != topChromeBlurProgress else { return }
         topChromeBlurProgress = progress
+    }
+
+    private var keyboardDismissDragGesture: some Gesture {
+        DragGesture(minimumDistance: 18, coordinateSpace: .local)
+            .onEnded { value in
+                guard value.translation.height > 22,
+                      abs(value.translation.height) > abs(value.translation.width)
+                else {
+                    return
+                }
+
+                dismissKeyboard()
+            }
     }
 
     @ViewBuilder
@@ -701,9 +725,8 @@ struct ContentView: View {
                 .overlay {
                     Capsule().fill(LiquidPalette.glassTint.opacity(0.040))
                 }
-                .glassEffect(.regular.tint(LiquidPalette.glassTint.opacity(0.070)).interactive(), in: Capsule())
         }
-        .shadow(color: .black.opacity(0.055), radius: 15, y: 7)
+        .shadow(color: .black.opacity(0.045), radius: 10, y: 5)
         .animation(.spring(response: 0.34, dampingFraction: 0.78), value: selectedDockAction)
     }
 
@@ -949,6 +972,8 @@ struct ContentView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 16)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(keyboardDismissDragGesture)
             .background {
                 LiquidGlassBackground()
                     .ignoresSafeArea()
@@ -2036,6 +2061,8 @@ struct ContentView: View {
     }
 
     private func selectDockAction(_ action: DockAction) {
+        guard selectedDockAction != action else { return }
+
         withAnimation(.spring(response: 0.34, dampingFraction: 0.78)) {
             selectedDockAction = action
         }

@@ -224,7 +224,7 @@ struct LiquidIconButton: View {
                 .overlay {
                     shineOverlay(shape: shape, isDisabled: false)
                 }
-                .shadow(color: shadowColor, radius: isSelected ? 13 : 8, y: isSelected ? 5 : 3)
+                .shadow(color: shadowColor, radius: isSelected ? 9 : 5, y: isSelected ? 4 : 2)
         }
     }
 
@@ -615,7 +615,7 @@ private struct LiquidCardBackground: ViewModifier {
                                 lineWidth: 0.8
                             )
                         }
-                        .shadow(color: .black.opacity(0.045), radius: prominent ? 16 : 10, y: prominent ? 7 : 4)
+                        .shadow(color: .black.opacity(prominent ? 0.036 : 0.026), radius: prominent ? 10 : 5, y: prominent ? 5 : 2)
                 }
             }
     }

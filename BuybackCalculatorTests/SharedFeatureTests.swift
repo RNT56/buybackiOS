@@ -98,8 +98,15 @@ final class SharedFeatureTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(BuybackCalculator.parseDecimal("$1,234.56")), 1_234.56, accuracy: 0.0001)
         XCTAssertEqual(try XCTUnwrap(BuybackCalculator.parseDecimal("1.234,56 EUR")), 1_234.56, accuracy: 0.0001)
         XCTAssertEqual(try XCTUnwrap(BuybackCalculator.parseDecimal("1 234,56")), 1_234.56, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(BuybackCalculator.parseDecimal("291.113", locale: Locale(identifier: "de_DE"))), 291.113, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(BuybackCalculator.parseDecimal("291.11", locale: Locale(identifier: "de_DE"))), 291.11, accuracy: 0.0001)
         XCTAssertEqual(try XCTUnwrap(BuybackCalculator.parseDecimal("-12.5%")), -12.5, accuracy: 0.0001)
         XCTAssertNil(BuybackCalculator.parseDecimal("USD"))
+    }
+
+    func testInputStringUsesStableUngroupedDecimalFormat() {
+        XCTAssertEqual(1_234.56.inputString, "1234.56")
+        XCTAssertEqual(291.113.inputString, "291.113")
     }
 
     func testTaxLotDraftStorageRoundTripsMoreThanThreeLots() throws {

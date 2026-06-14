@@ -401,26 +401,34 @@ enum BuybackCalculator {
         )
     }
 
-    static func parseDecimal(_ text: String) -> Double? {
+    static func parseDecimal(_ text: String, locale: Locale = .current) -> Double? {
         let trimmed = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\u{00a0}", with: " ")
 
         guard !trimmed.isEmpty else { return nil }
 
-        for locale in [Locale.current, BuybackFormat.locale, Locale(identifier: "de_DE")] {
-            if let value = decimalFormatter(locale: locale).number(from: trimmed)?.doubleValue,
+        if let value = normalizedDecimalValue(from: trimmed, locale: locale) {
+            return value
+        }
+
+        for candidateLocale in [locale, BuybackFormat.locale, Locale(identifier: "de_DE")] {
+            if let value = decimalFormatter(locale: candidateLocale).number(from: trimmed)?.doubleValue,
                value.isFinite {
                 return value
             }
 
-            if let value = currencyFormatter(locale: locale).number(from: trimmed)?.doubleValue,
+            if let value = currencyFormatter(locale: candidateLocale).number(from: trimmed)?.doubleValue,
                value.isFinite {
                 return value
             }
         }
 
-        let filtered = trimmed
+        return nil
+    }
+
+    private static func normalizedDecimalValue(from text: String, locale: Locale) -> Double? {
+        let filtered = text
             .unicodeScalars
             .compactMap { scalar -> Character? in
                 switch scalar {
@@ -443,26 +451,11 @@ enum BuybackCalculator {
         body.removeAll { $0 == "-" || $0 == "+" }
 
         let separatorIndices = body.indices.filter { body[$0] == "." || body[$0] == "," }
-        let decimalSeparatorIndex: String.Index?
-        if let lastDot = body.lastIndex(of: "."),
-           let lastComma = body.lastIndex(of: ",") {
-            decimalSeparatorIndex = lastDot > lastComma ? lastDot : lastComma
-        } else if separatorIndices.count == 1,
-                  let onlySeparator = separatorIndices.first {
-            let digitsBefore = body[..<onlySeparator].filter(\.isNumber).count
-            let digitsAfter = body[body.index(after: onlySeparator)...].filter(\.isNumber).count
-            let localeDecimalSeparator = Locale.current.decimalSeparator ?? "."
-            let separator = String(body[onlySeparator])
-            if digitsAfter == 0 {
-                decimalSeparatorIndex = nil
-            } else if digitsAfter == 3, digitsBefore <= 3, separator != localeDecimalSeparator {
-                decimalSeparatorIndex = nil
-            } else {
-                decimalSeparatorIndex = onlySeparator
-            }
-        } else {
-            decimalSeparatorIndex = nil
-        }
+        let decimalSeparatorIndex = decimalSeparatorIndex(
+            in: body,
+            separatorIndices: separatorIndices,
+            locale: locale
+        )
 
         var normalized = sign
         for index in body.indices {
@@ -479,6 +472,52 @@ enum BuybackCalculator {
         }
 
         return Double(normalized).flatMap { $0.isFinite ? $0 : nil }
+    }
+
+    private static func decimalSeparatorIndex(
+        in body: String,
+        separatorIndices: [String.Index],
+        locale: Locale
+    ) -> String.Index? {
+        if let lastDot = body.lastIndex(of: "."),
+           let lastComma = body.lastIndex(of: ",") {
+            return lastDot > lastComma ? lastDot : lastComma
+        } else if separatorIndices.count == 1,
+                  let onlySeparator = separatorIndices.first {
+            let digitsBefore = body[..<onlySeparator].filter(\.isNumber).count
+            let digitsAfter = body[body.index(after: onlySeparator)...].filter(\.isNumber).count
+            let localeDecimalSeparator = locale.decimalSeparator ?? "."
+            let separator = String(body[onlySeparator])
+            if digitsAfter == 0 {
+                return nil
+            } else if digitsAfter == 3, digitsBefore <= 2, separator != localeDecimalSeparator {
+                return nil
+            } else {
+                return onlySeparator
+            }
+        } else if separatorIndices.count > 1,
+                  hasGroupedThousands(in: body, separatorIndices: separatorIndices) {
+            return nil
+        } else {
+            return nil
+        }
+    }
+
+    private static func hasGroupedThousands(in body: String, separatorIndices: [String.Index]) -> Bool {
+        guard let firstSeparator = separatorIndices.first else { return false }
+        let separator = body[firstSeparator]
+        guard separatorIndices.allSatisfy({ body[$0] == separator }) else { return false }
+
+        let groups = body.split(separator: separator, omittingEmptySubsequences: false)
+        guard groups.count > 1,
+              let firstGroup = groups.first,
+              !firstGroup.isEmpty,
+              firstGroup.count <= 3
+        else {
+            return false
+        }
+
+        return groups.dropFirst().allSatisfy { $0.count == 3 && $0.allSatisfy(\.isNumber) }
     }
 
     private static func decimalFormatter(locale: Locale) -> NumberFormatter {
@@ -602,7 +641,8 @@ extension Double {
     var inputString: String {
         formatted(
             .number
-                .precision(.fractionLength(0...3))
+                .grouping(.never)
+                .precision(.fractionLength(0...6))
                 .locale(BuybackFormat.locale)
         )
     }
