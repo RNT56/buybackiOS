@@ -49,6 +49,7 @@ final class SharedFeatureTests: XCTestCase {
 
         XCTAssertEqual(scenario.trackingState, .watching)
         XCTAssertFalse(scenario.isFrozen)
+        XCTAssertFalse(scenario.isPinned)
         XCTAssertEqual(try XCTUnwrap(scenario.averageCostBasis), 100, accuracy: 0.0001)
         XCTAssertNil(scenario.frozenSellPrice)
     }
@@ -297,6 +298,65 @@ final class SharedFeatureTests: XCTestCase {
         XCTAssertNil(unfrozen.frozenSellPrice)
     }
 
+    func testSavedScenarioPinningCapsAtTenAndOrdersWidgetRows() throws {
+        let suiteName = "buybackCalculator.pins.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
+        let ids = (0..<11).map { _ in UUID() }
+        let scenarios = ids.enumerated().map { index, id in
+            makeScenario(
+                id: id,
+                symbol: "PIN\(index)",
+                savedAt: baseDate.addingTimeInterval(TimeInterval(index))
+            )
+        }
+        SavedScenarioStorage.save(scenarios, userDefaults: userDefaults)
+        XCTAssertTrue(SavedScenarioStorage.widgetScenarios(from: SavedScenarioStorage.load(userDefaults: userDefaults)).isEmpty)
+
+        for index in 0..<SavedScenarioStorage.maximumPinnedScenarios {
+            XCTAssertTrue(
+                SavedScenarioStorage.pinScenario(
+                    id: ids[index],
+                    now: baseDate.addingTimeInterval(TimeInterval(index)),
+                    userDefaults: userDefaults
+                )
+            )
+        }
+
+        XCTAssertFalse(
+            SavedScenarioStorage.pinScenario(
+                id: ids[10],
+                now: baseDate.addingTimeInterval(10),
+                userDefaults: userDefaults
+            )
+        )
+
+        var loaded = SavedScenarioStorage.load(userDefaults: userDefaults)
+        var pinned = SavedScenarioStorage.pinnedScenarios(from: loaded)
+        XCTAssertEqual(pinned.count, SavedScenarioStorage.maximumPinnedScenarios)
+        XCTAssertEqual(pinned.first?.id, ids[9])
+        XCTAssertEqual(SavedScenarioStorage.widgetScenarios(from: loaded).map(\.id), pinned.map(\.id))
+
+        XCTAssertTrue(SavedScenarioStorage.unpinScenario(id: ids[0], userDefaults: userDefaults))
+        XCTAssertTrue(
+            SavedScenarioStorage.pinScenario(
+                id: ids[10],
+                now: baseDate.addingTimeInterval(20),
+                userDefaults: userDefaults
+            )
+        )
+
+        loaded = SavedScenarioStorage.load(userDefaults: userDefaults)
+        pinned = SavedScenarioStorage.pinnedScenarios(from: loaded)
+        XCTAssertEqual(pinned.count, SavedScenarioStorage.maximumPinnedScenarios)
+        XCTAssertEqual(pinned.first?.id, ids[10])
+        XCTAssertFalse(try XCTUnwrap(loaded.first { $0.id == ids[0] }).isPinned)
+    }
+
     func testTaxLotScenarioUsesWeightedBasisWhenWatchingAndFrozen() throws {
         let scenario = SavedBuybackScenario(
             id: UUID(),
@@ -425,5 +485,134 @@ final class SharedFeatureTests: XCTestCase {
                 includeSavedKeys: false
             )
         )
+    }
+
+    func testMarketQuoteCacheThrottlesRefreshesAndFallsBackToCachedQuote() async throws {
+        let suiteName = "buybackCalculator.quoteCache.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let asset = MarketAsset(symbol: "AAPL", name: "Apple Inc.", currencyCode: "USD", source: .finnhub)
+        let firstQuote = MarketQuote(
+            symbol: "AAPL",
+            price: 100,
+            currencyCode: "USD",
+            timestamp: now,
+            source: .finnhub,
+            isStale: false,
+            statusMessage: nil
+        )
+        let secondQuote = MarketQuote(
+            symbol: "AAPL",
+            price: 120,
+            currencyCode: "USD",
+            timestamp: now.addingTimeInterval(301),
+            source: .finnhub,
+            isStale: false,
+            statusMessage: nil
+        )
+        let client = StubMarketDataClient(quotes: [firstQuote, secondQuote])
+
+        let liveResult = await MarketQuoteCache.refreshQuote(for: asset, client: client, now: now, userDefaults: userDefaults)
+        XCTAssertEqual(liveResult.status, .live)
+        XCTAssertEqual(liveResult.quote, firstQuote)
+        var quoteRequestCount = await client.quoteRequestCount
+        XCTAssertEqual(quoteRequestCount, 1)
+
+        let cachedResult = await MarketQuoteCache.refreshQuote(
+            for: asset,
+            client: client,
+            now: now.addingTimeInterval(60),
+            userDefaults: userDefaults
+        )
+        XCTAssertEqual(cachedResult.status, .cached(nextRefreshAt: now.addingTimeInterval(MarketQuoteCache.minimumRefreshInterval)))
+        XCTAssertEqual(cachedResult.quote, firstQuote)
+        quoteRequestCount = await client.quoteRequestCount
+        XCTAssertEqual(quoteRequestCount, 1)
+
+        let refreshedResult = await MarketQuoteCache.refreshQuote(
+            for: asset,
+            client: client,
+            now: now.addingTimeInterval(MarketQuoteCache.minimumRefreshInterval + 1),
+            userDefaults: userDefaults
+        )
+        XCTAssertEqual(refreshedResult.status, .live)
+        XCTAssertEqual(refreshedResult.quote, secondQuote)
+        quoteRequestCount = await client.quoteRequestCount
+        XCTAssertEqual(quoteRequestCount, 2)
+
+        let failingClient = StubMarketDataClient(error: MarketDataError.rateLimited)
+        let fallbackResult = await MarketQuoteCache.refreshQuote(
+            for: asset,
+            client: failingClient,
+            now: now.addingTimeInterval(MarketQuoteCache.minimumRefreshInterval * 2 + 2),
+            userDefaults: userDefaults
+        )
+
+        XCTAssertEqual(fallbackResult.quote, secondQuote)
+        if case .cachedFallback(let reason) = fallbackResult.status {
+            XCTAssertTrue(reason.localizedCaseInsensitiveContains("limit"))
+        } else {
+            XCTFail("Expected cached fallback after a failed refresh.")
+        }
+    }
+
+    private func makeScenario(
+        id: UUID = UUID(),
+        symbol: String = "AAPL",
+        savedAt: Date = .now,
+        pinnedAt: Date? = nil
+    ) -> SavedBuybackScenario {
+        SavedBuybackScenario(
+            id: id,
+            name: symbol,
+            savedAt: savedAt,
+            assetQuery: symbol,
+            selectedAsset: nil,
+            manualPriceEnabled: false,
+            symbol: symbol,
+            currencyCode: "USD",
+            sellPrice: 100,
+            gainPercent: 100,
+            sharesToSell: 1,
+            averageCostBasis: 50,
+            taxRatePercent: 27,
+            targetExtraSharesPercent: 0,
+            sellFeeTotal: 0,
+            buyFeeTotal: 0,
+            slippagePercent: 0,
+            pinnedAt: pinnedAt
+        )
+    }
+}
+
+private actor StubMarketDataClient: MarketDataClient {
+    private var quotes: [MarketQuote]
+    private let error: Error?
+    private(set) var quoteRequestCount = 0
+
+    init(quotes: [MarketQuote] = [], error: Error? = nil) {
+        self.quotes = quotes
+        self.error = error
+    }
+
+    func searchAssets(query: String) async throws -> [MarketAsset] {
+        []
+    }
+
+    func quote(for asset: MarketAsset) async throws -> MarketQuote {
+        quoteRequestCount += 1
+        if let error {
+            throw error
+        }
+
+        guard !quotes.isEmpty else {
+            throw MarketDataError.quoteUnavailable
+        }
+
+        return quotes.removeFirst()
     }
 }

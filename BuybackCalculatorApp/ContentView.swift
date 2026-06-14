@@ -1423,6 +1423,15 @@ struct ContentView: View {
             }
 
             iconActionButton(
+                icon: .pin,
+                role: .accent,
+                accessibilityLabel: "Pin current asset to widgets",
+                isDisabled: !canPinCalculation(calculation)
+            ) {
+                pinCurrentScenario(calculation)
+            }
+
+            iconActionButton(
                 icon: .save,
                 role: .accent,
                 accessibilityLabel: "Save current scenario"
@@ -1749,6 +1758,13 @@ struct ContentView: View {
                 Spacer(minLength: 8)
 
                 HStack(spacing: 10) {
+                    Text("Pinned \(scenarios.pinnedCount)/\(SavedScenarioStorage.maximumPinnedScenarios)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .liquidCapsuleSurface(tint: LiquidPalette.accent)
+
                     Button {
                         saveScenario(calculation)
                     } label: {
@@ -1773,6 +1789,7 @@ struct ContentView: View {
             }
 
             StatusRow(message: .info("Watching scenarios model the live quote as the sell price. Frozen scenarios keep the sell price fixed and compare the buy-back limit against refreshed live prices."))
+            StatusRow(message: .info("Pin up to \(SavedScenarioStorage.maximumPinnedScenarios) assets for the portfolio widget. Live quote refreshes are cached for five minutes per asset to protect API limits."))
 
             if scenarios.scenarios.isEmpty {
                 Text("No saved scenarios yet.")
@@ -1791,9 +1808,12 @@ struct ContentView: View {
                             calculation: scenario.calculation(using: scenarioQuotes[scenario.id]),
                             alert: alerts.alert(for: scenario.displaySymbol),
                             message: scenarioMessages[scenario.id],
-                            isRefreshing: scenarioRefreshingIDs.contains(scenario.id)
+                            isRefreshing: scenarioRefreshingIDs.contains(scenario.id),
+                            canPinMore: scenarios.canPinMore
                         ) {
                             loadScenario(scenario)
+                        } onTogglePin: {
+                            toggleScenarioPin(scenario)
                         } onFreeze: {
                             openFreezeEditor(scenario)
                         } onEditFreeze: {
@@ -1907,7 +1927,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Home Screen widget")
                     .font(.headline)
-                Text("Save scenarios to fill the portfolio widget. Existing single-stock widgets can still be configured in widget settings.")
+                Text("Pin up to \(SavedScenarioStorage.maximumPinnedScenarios) scenarios for the portfolio widget. Quotes refresh locally with a five-minute per-asset cache.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2189,13 +2209,37 @@ struct ContentView: View {
         scenarioMessage = .info("\(calculation.displaySymbol) frozen at \(calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode)).")
     }
 
+    private func pinCurrentScenario(_ calculation: BuybackCalculation) {
+        var scenario = makeScenario(calculation, pinnedAt: .now)
+        if let existingScenario = scenarios.scenarios.first(where: { $0.displaySymbol == calculation.displaySymbol }) {
+            scenario.id = existingScenario.id
+        }
+
+        guard scenarios.savePinned(scenario) else {
+            scenarioMessage = .warning("Unpin an asset before adding another widget asset. The limit is \(SavedScenarioStorage.maximumPinnedScenarios).")
+            return
+        }
+
+        WidgetCenter.shared.reloadAllTimelines()
+        scenarioMessage = .info("\(calculation.displaySymbol) pinned for the portfolio widget (\(scenarios.pinnedCount)/\(SavedScenarioStorage.maximumPinnedScenarios)).")
+    }
+
+    private func canPinCalculation(_ calculation: BuybackCalculation) -> Bool {
+        if scenarios.scenarios.contains(where: { $0.displaySymbol == calculation.displaySymbol && $0.isPinned }) {
+            return true
+        }
+
+        return scenarios.canPinMore
+    }
+
     private func makeScenario(
         _ calculation: BuybackCalculation,
         trackingState: ScenarioTrackingState = .watching,
         frozenSellPrice: Double? = nil,
         frozenCurrencyCode: String? = nil,
         frozenAt: Date? = nil,
-        frozenQuoteTimestamp: Date? = nil
+        frozenQuoteTimestamp: Date? = nil,
+        pinnedAt: Date? = nil
     ) -> SavedBuybackScenario {
         let scenario = SavedBuybackScenario(
             id: UUID(),
@@ -2224,7 +2268,8 @@ struct ContentView: View {
             frozenSellPrice: frozenSellPrice,
             frozenCurrencyCode: frozenCurrencyCode,
             frozenAt: frozenAt,
-            frozenQuoteTimestamp: frozenQuoteTimestamp
+            frozenQuoteTimestamp: frozenQuoteTimestamp,
+            pinnedAt: pinnedAt
         )
         return scenario
     }
@@ -2281,11 +2326,15 @@ struct ContentView: View {
                 includeSavedKeys: true
             ) else {
                 savedScenarios.forEach { scenario in
-                    scenarioMessages[scenario.id] = .warning("Using saved price. Add a Finnhub key for live scenario refresh.")
+                    let result = MarketQuoteCache.cachedResult(
+                        for: scenario.portfolioAsset,
+                        reason: "Add a Finnhub key for live scenario refresh."
+                    )
+                    applyScenarioQuoteResult(result, to: scenario)
                 }
                 scenarioRefreshingIDs.removeAll()
                 isRefreshingScenarios = false
-                scenarioMessage = .warning("Live scenario refresh needs a Finnhub API key.")
+                scenarioMessage = .warning("Live scenario refresh needs a Finnhub API key. Cached quotes are used when available.")
                 return
             }
 
@@ -2302,23 +2351,52 @@ struct ContentView: View {
 
     private func refreshScenarioQuote(_ scenario: SavedBuybackScenario, client: CompositeMarketDataClient) async {
         scenarioMessages[scenario.id] = nil
+        let result = await MarketQuoteCache.refreshQuote(for: scenario.portfolioAsset, client: client)
+        applyScenarioQuoteResult(result, to: scenario)
+        scenarioRefreshingIDs.remove(scenario.id)
+    }
 
-        do {
-            let quote = try await client.quote(for: scenario.portfolioAsset)
+    private func applyScenarioQuoteResult(_ result: MarketQuoteRefreshResult, to scenario: SavedBuybackScenario) {
+        if let quote = result.quote {
             scenarioQuotes[scenario.id] = quote
-            scenarioMessages[scenario.id] = quote.isStale
-                ? .warning(quote.statusMessage ?? "Live price is stale; verify before trading.")
-                : .info("Live price updated.")
+            scenarioMessages[scenario.id] = scenarioMessage(for: result, quote: quote)
 
             if let calculation = scenario.calculation(using: quote) {
                 alerts.evaluate(symbol: calculation.symbol, price: quote.price, calculation: calculation)
             }
-        } catch {
+        } else {
             scenarioQuotes.removeValue(forKey: scenario.id)
-            scenarioMessages[scenario.id] = .warning("Using saved price. \(marketDataMessage(for: error))")
+            scenarioMessages[scenario.id] = scenarioMessage(for: result, quote: nil)
+        }
+    }
+
+    private func scenarioMessage(for result: MarketQuoteRefreshResult, quote: MarketQuote?) -> LookupMessage {
+        switch result.status {
+        case .live:
+            if quote?.isStale == true {
+                return .warning(quote?.statusMessage ?? "Live price is stale; verify before trading.")
+            }
+            return .info("Live price updated.")
+        case .cached(let nextRefreshAt):
+            return .info("Using cached price. Next live refresh after \(nextRefreshAt.formatted(date: .omitted, time: .shortened)).")
+        case .cachedFallback(let reason):
+            return .warning("Using cached price. \(reason)")
+        case .unavailable(let reason):
+            return .warning("Using saved price. \(reason)")
+        }
+    }
+
+    private func toggleScenarioPin(_ scenario: SavedBuybackScenario) {
+        let didUpdate = scenarios.togglePin(scenario)
+        guard didUpdate else {
+            scenarioMessage = .warning("Unpin an asset before adding another widget asset. The limit is \(SavedScenarioStorage.maximumPinnedScenarios).")
+            return
         }
 
-        scenarioRefreshingIDs.remove(scenario.id)
+        WidgetCenter.shared.reloadAllTimelines()
+        scenarioMessage = scenario.isPinned
+            ? .info("\(scenario.displaySymbol) removed from the portfolio widget.")
+            : .info("\(scenario.displaySymbol) pinned for the portfolio widget (\(scenarios.pinnedCount)/\(SavedScenarioStorage.maximumPinnedScenarios)).")
     }
 
     private func openFreezeEditor(_ scenario: SavedBuybackScenario) {
@@ -2777,7 +2855,9 @@ private struct ScenarioComparisonRow: View {
     let alert: PriceAlert?
     let message: LookupMessage?
     let isRefreshing: Bool
+    let canPinMore: Bool
     let onLoad: () -> Void
+    let onTogglePin: () -> Void
     let onFreeze: () -> Void
     let onEditFreeze: () -> Void
     let onUnfreeze: () -> Void
@@ -2819,6 +2899,7 @@ private struct ScenarioComparisonRow: View {
                     comparisonMetric("Limit", value: calculation.maximumBuybackPrice.moneyString(currencyCode: calculation.currencyCode), icon: .limit)
                     comparisonMetric("Drop", value: calculation.requiredDropPercent.compactPercentString, icon: .drop)
                     comparisonMetric("Alert", value: alertText, icon: alert?.isEnabled == true ? .alertArmed : .alert)
+                    comparisonMetric("Widget", value: scenario.isPinned ? "Pinned" : "Off", icon: .pin)
                 }
             } else {
                 StatusRow(message: .warning("Check saved scenario inputs."))
@@ -2829,6 +2910,18 @@ private struct ScenarioComparisonRow: View {
             }
 
             HStack(spacing: 10) {
+                Button(action: onTogglePin) {
+                    LiquidGlassActionIcon(
+                        icon: .pin,
+                        tint: scenario.isPinned ? LiquidPalette.accent : LiquidPalette.muted,
+                        size: 38
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .disabled(!scenario.isPinned && !canPinMore)
+                .accessibilityLabel(scenario.isPinned ? "Unpin from portfolio widget" : "Pin to portfolio widget")
+
                 if scenario.isFrozen {
                     Button(action: onEditFreeze) {
                         LiquidGlassActionIcon(icon: .edit, tint: LiquidPalette.muted, size: 38)
@@ -2875,7 +2968,8 @@ private struct ScenarioComparisonRow: View {
     private var subtitle: String {
         let savedDate = scenario.savedAt.formatted(date: .abbreviated, time: .shortened)
         let status = quote == nil ? "saved price" : "live price"
-        return "\(scenario.displaySymbol) - \(stateText.lowercased()) - \(status) - saved \(savedDate)"
+        let pinState = scenario.isPinned ? "pinned" : "not pinned"
+        return "\(scenario.displaySymbol) - \(pinState) - \(stateText.lowercased()) - \(status) - saved \(savedDate)"
     }
 
     private var stateText: String {
@@ -2891,11 +2985,19 @@ private struct ScenarioComparisonRow: View {
             return .bookmark
         }
 
+        if scenario.isPinned {
+            return .pin
+        }
+
         return quote == nil ? .bookmark : .live
     }
 
     private var statusTint: Color {
         if scenario.isBuybackReady(using: quote) {
+            return LiquidPalette.accent
+        }
+
+        if scenario.isPinned {
             return LiquidPalette.accent
         }
 

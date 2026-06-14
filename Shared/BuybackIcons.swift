@@ -37,6 +37,7 @@ enum BuybackIconKind: String, CaseIterable, Sendable {
     case sensitivity
     case scenarios
     case bookmark
+    case pin
     case alert
     case alertArmed
     case alertOff
@@ -410,6 +411,13 @@ private enum BuybackIconDrawing {
 
         case .bookmark:
             fill(poly([(0.30, 0.18), (0.70, 0.18), (0.70, 0.82), (0.50, 0.67), (0.30, 0.82)], closed: true), opacity: 0.72)
+
+        case .pin:
+            fill(circle(0.50, 0.24, 0.055), opacity: 0.78)
+            stroke(line(0.50, 0.30, 0.50, 0.76), width: heavyLine)
+            stroke(line(0.32, 0.43, 0.68, 0.43), opacity: 0.88, width: heavyLine)
+            stroke(line(0.42, 0.76, 0.58, 0.76), opacity: 0.72, width: thinLine)
+            stroke(line(0.50, 0.76, 0.50, 0.86), opacity: 0.72, width: thinLine)
 
         case .alert, .alertArmed, .alertOff:
             stroke(poly([(0.31, 0.62), (0.34, 0.42), (0.50, 0.28), (0.66, 0.42), (0.69, 0.62)]), width: heavyLine)

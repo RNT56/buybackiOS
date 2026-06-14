@@ -155,6 +155,8 @@ struct BuybackPortfolioEntry: TimelineEntry {
     let date: Date
     let rows: [BuybackPortfolioRow]
     let hasSavedScenarios: Bool
+    let hasPinnedScenarios: Bool
+    let pinnedCount: Int
 }
 
 struct BuybackPortfolioRow: Identifiable, Equatable {
@@ -176,12 +178,15 @@ struct BuybackPortfolioRow: Identifiable, Equatable {
 
 enum WidgetPriceStatus: Equatable, Sendable {
     case live
+    case cached(String)
     case fallback(String)
 
     var label: String {
         switch self {
         case .live:
             return "Live"
+        case .cached:
+            return "Cached"
         case .fallback:
             return "Fallback"
         }
@@ -189,11 +194,35 @@ enum WidgetPriceStatus: Equatable, Sendable {
 
     var icon: BuybackIconKind {
         switch self {
-        case .live:
+        case .live, .cached:
             return .live
         case .fallback:
             return .warning
         }
+    }
+}
+
+private func widgetPriceStatus(for status: MarketQuoteRefreshStatus) -> WidgetPriceStatus {
+    switch status {
+    case .live:
+        return .live
+    case .cached:
+        return .cached("Cached")
+    case .cachedFallback(let reason):
+        return .cached(reason)
+    case .unavailable(let reason):
+        return .fallback(reason)
+    }
+}
+
+private func widgetFallbackReason(for status: MarketQuoteRefreshStatus) -> String {
+    switch status {
+    case .live:
+        return "Live"
+    case .cached:
+        return "Cached"
+    case .cachedFallback(let reason), .unavailable(let reason):
+        return reason
     }
 }
 
@@ -333,7 +362,7 @@ struct BuybackProvider: AppIntentTimelineProvider {
         let entry = await makeEntry(configuration: configuration)
         return Timeline(
             entries: [entry],
-            policy: .after(Date().addingTimeInterval(30 * 60))
+            policy: .after(Date().addingTimeInterval(MarketQuoteCache.widgetTimelineInterval))
         )
     }
 
@@ -345,6 +374,18 @@ struct BuybackProvider: AppIntentTimelineProvider {
         let directAsset = fallbackAsset(for: query)
 
         guard let client = MarketDataClientFactory.make() else {
+            let cachedResult = MarketQuoteCache.cachedResult(for: directAsset, reason: "Missing API key", now: date)
+            if let quote = cachedResult.quote {
+                return makeQuotedEntry(
+                    configuration: configuration,
+                    date: date,
+                    query: query,
+                    asset: directAsset,
+                    quote: quote,
+                    priceStatus: widgetPriceStatus(for: cachedResult.status)
+                )
+            }
+
             return makeFallbackEntry(
                 configuration: configuration,
                 date: date,
@@ -355,20 +396,21 @@ struct BuybackProvider: AppIntentTimelineProvider {
 
         do {
             let asset = try await resolveAsset(for: query, client: client)
-
-            do {
-                return try await makeLiveEntry(
+            let quoteResult = await MarketQuoteCache.refreshQuote(for: asset, client: client, now: date)
+            if let quote = quoteResult.quote {
+                return makeQuotedEntry(
                     configuration: configuration,
                     date: date,
                     query: query,
                     asset: asset,
-                    client: client
+                    quote: quote,
+                    priceStatus: widgetPriceStatus(for: quoteResult.status)
                 )
-            } catch {
+            } else {
                 return makeFallbackEntry(
                     configuration: configuration,
                     date: date,
-                    reason: fallbackReason(for: error),
+                    reason: widgetFallbackReason(for: quoteResult.status),
                     asset: asset
                 )
             }
@@ -382,14 +424,14 @@ struct BuybackProvider: AppIntentTimelineProvider {
         }
     }
 
-    private func makeLiveEntry(
+    private func makeQuotedEntry(
         configuration: BuybackWidgetConfiguration,
         date: Date,
         query: String,
         asset: MarketAsset,
-        client: CompositeMarketDataClient
-    ) async throws -> BuybackEntry {
-        let quote = try await client.quote(for: asset)
+        quote: MarketQuote,
+        priceStatus: WidgetPriceStatus
+    ) -> BuybackEntry {
         let calculation = BuybackCalculator.calculate(
             symbol: asset.symbol,
             sellPrice: quote.price,
@@ -415,7 +457,7 @@ struct BuybackProvider: AppIntentTimelineProvider {
             gainAtSellPercent: configuration.gainAtSellPercent,
             fallbackSellPrice: configuration.fallbackSellPrice,
             quote: quote,
-            priceStatus: .live,
+            priceStatus: priceStatus,
             alert: alert(for: asset.symbol),
             calculation: calculation
         )
@@ -556,46 +598,58 @@ struct BuybackPortfolioProvider: AppIntentTimelineProvider {
         let entry = await makeEntry(for: context)
         return Timeline(
             entries: [entry],
-            policy: .after(Date().addingTimeInterval(30 * 60))
+            policy: .after(Date().addingTimeInterval(MarketQuoteCache.widgetTimelineInterval))
         )
     }
 
     private func makeEntry(for context: Context, date: Date = .now) async -> BuybackPortfolioEntry {
         let savedScenarios = SavedScenarioStorage.load()
+        let pinnedScenarios = SavedScenarioStorage.pinnedScenarios(from: savedScenarios)
+        let displayScenarios = SavedScenarioStorage.widgetScenarios(from: savedScenarios)
         guard !savedScenarios.isEmpty else {
-            return BuybackPortfolioEntry(date: date, rows: [], hasSavedScenarios: false)
+            return BuybackPortfolioEntry(
+                date: date,
+                rows: [],
+                hasSavedScenarios: false,
+                hasPinnedScenarios: false,
+                pinnedCount: 0
+            )
         }
 
         let client = MarketDataClientFactory.make()
         let alerts = PriceAlertStorage.load()
         var rows: [BuybackPortfolioRow] = []
-        for scenario in savedScenarios.prefix(maxRows(for: context.family)) {
-            rows.append(await makeRow(for: scenario, client: client, alerts: alerts))
+        for scenario in displayScenarios.prefix(maxRows(for: context.family)) {
+            rows.append(await makeRow(for: scenario, client: client, alerts: alerts, date: date))
         }
 
-        return BuybackPortfolioEntry(date: date, rows: rows, hasSavedScenarios: true)
+        return BuybackPortfolioEntry(
+            date: date,
+            rows: rows,
+            hasSavedScenarios: true,
+            hasPinnedScenarios: !pinnedScenarios.isEmpty,
+            pinnedCount: pinnedScenarios.count
+        )
     }
 
     private func makeRow(
         for scenario: SavedBuybackScenario,
         client: CompositeMarketDataClient?,
-        alerts: [PriceAlert]
+        alerts: [PriceAlert],
+        date: Date
     ) async -> BuybackPortfolioRow {
         let asset = scenario.portfolioAsset
         let quote: MarketQuote?
         let priceStatus: WidgetPriceStatus
 
         if let client {
-            do {
-                quote = try await client.quote(for: asset)
-                priceStatus = .live
-            } catch {
-                quote = nil
-                priceStatus = .fallback(fallbackReason(for: error))
-            }
+            let result = await MarketQuoteCache.refreshQuote(for: asset, client: client, now: date)
+            quote = result.quote
+            priceStatus = widgetPriceStatus(for: result.status)
         } else {
-            quote = nil
-            priceStatus = .fallback("Missing key")
+            let result = MarketQuoteCache.cachedResult(for: asset, reason: "Missing key", now: date)
+            quote = result.quote
+            priceStatus = widgetPriceStatus(for: result.status)
         }
 
         let calculation = scenario.calculation(using: quote)
@@ -622,32 +676,15 @@ struct BuybackPortfolioProvider: AppIntentTimelineProvider {
         switch family {
         case .systemSmall:
             return 2
+        case .systemExtraLarge:
+            return 10
         case .systemLarge:
-            return 5
+            return 6
         default:
             return 3
         }
     }
 
-    private func fallbackReason(for error: Error) -> String {
-        if let marketDataError = error as? MarketDataError {
-            switch marketDataError {
-            case .missingAPIKey:
-                return "Missing key"
-            case .rateLimited:
-                return "Rate limit"
-            case .noResults:
-                return "No result"
-            case .quoteUnavailable:
-                return "No quote"
-            case .badStatusCode(let statusCode):
-                return "HTTP \(statusCode)"
-            case .invalidURL, .invalidResponse:
-                return "Data error"
-            }
-        }
-        return "Saved price"
-    }
 }
 
 struct BuybackWidgetEntryView: View {
@@ -854,6 +891,8 @@ struct BuybackWidgetEntryView: View {
         switch entry.priceStatus {
         case .live:
             return entry.quote?.timestamp?.formatted(date: .omitted, time: .shortened) ?? "Now"
+        case .cached(let reason):
+            return reason
         case .fallback(let reason):
             return reason
         }
@@ -861,7 +900,7 @@ struct BuybackWidgetEntryView: View {
 
     private var statusTint: Color {
         switch entry.priceStatus {
-        case .live:
+        case .live, .cached:
             return WidgetTint.accent
         case .fallback:
             return WidgetTint.muted
@@ -936,12 +975,12 @@ struct BuybackPortfolioWidgetEntryView: View {
                 prominence: .decorative
             )
 
-            Text("Save assets")
+            Text(entry.hasSavedScenarios ? "Pin assets" : "Save assets")
                 .font(family == .systemSmall ? .headline.weight(.bold) : .title3.weight(.bold))
                 .lineLimit(1)
                 .widgetAccentable()
 
-            Text("Saved scenarios will appear here with live prices and buy-back limits.")
+            Text(emptyMessage)
                 .font(family == .systemSmall ? .caption2 : .caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(family == .systemSmall ? 4 : 3)
@@ -955,11 +994,21 @@ struct BuybackPortfolioWidgetEntryView: View {
         switch family {
         case .systemSmall:
             return 2
+        case .systemExtraLarge:
+            return 10
         case .systemLarge:
-            return 5
+            return 6
         default:
             return 3
         }
+    }
+
+    private var emptyMessage: String {
+        if entry.hasSavedScenarios {
+            return "Pin up to \(SavedScenarioStorage.maximumPinnedScenarios) saved scenarios in the app to track prices and buy-back limits here."
+        }
+
+        return "Save a buy-back scenario in the app, then pin it for the portfolio widget."
     }
 
     private var primaryDeepLinkURL: URL? {
@@ -1000,7 +1049,7 @@ private struct PortfolioWidgetHeader: View {
             )
 
             VStack(alignment: .leading, spacing: 0) {
-                Text("Portfolio")
+                Text(entry.hasPinnedScenarios ? "Pinned Assets" : "Portfolio")
                     .font(family == .systemSmall ? .caption.weight(.bold) : .subheadline.weight(.bold))
                     .lineLimit(1)
                     .widgetAccentable()
@@ -1025,11 +1074,25 @@ private struct PortfolioWidgetHeader: View {
 
     private var statusText: String {
         let readyCount = entry.rows.filter(\.isBuybackReady).count
-        let liveCount = entry.rows.filter { $0.priceStatus == .live }.count
+        let liveCount = entry.rows.filter {
+            switch $0.priceStatus {
+            case .live, .cached:
+                return true
+            case .fallback:
+                return false
+            }
+        }.count
         let frozenCount = entry.rows.filter { $0.trackingState == .frozen }.count
         let alertCount = entry.rows.filter { $0.alert?.isEnabled == true }.count
         if readyCount > 0 {
             return "\(readyCount) ready / \(entry.rows.count)"
+        }
+        if entry.hasPinnedScenarios {
+            let trackedText = "\(entry.pinnedCount) pinned"
+            if liveCount > 0 {
+                return "\(liveCount) priced / \(trackedText)"
+            }
+            return alertCount > 0 ? "\(trackedText) / \(alertCount) alerts" : trackedText
         }
         if frozenCount > 0 {
             return "\(frozenCount) frozen / \(entry.rows.count)"
@@ -1059,7 +1122,7 @@ private struct PortfolioAssetRow: View {
         }
 
         switch row.priceStatus {
-        case .live:
+        case .live, .cached:
             return WidgetTint.accent
         case .fallback:
             return WidgetTint.muted
@@ -1214,7 +1277,7 @@ private struct PortfolioWidgetFooter: View {
         HStack(spacing: 6) {
             WidgetIconSurface(icon: .live, tint: WidgetTint.muted, size: 20, prominence: .decorative)
 
-            Text("Freeze uses latest widget quote; alerts are checked in app")
+            Text("Quotes refresh at most every 15 min; cache protects API limits")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -1359,7 +1422,7 @@ private struct WidgetHeader: View {
 
     private var statusTint: Color {
         switch entry.priceStatus {
-        case .live:
+        case .live, .cached:
             return WidgetTint.accent
         case .fallback:
             return WidgetTint.muted
@@ -1397,7 +1460,7 @@ private struct WidgetStatusPill: View {
 
     private var tint: Color {
         switch status {
-        case .live:
+        case .live, .cached:
             return WidgetTint.accent
         case .fallback:
             return WidgetTint.muted
@@ -1580,8 +1643,8 @@ struct BuybackPortfolioWidget: Widget {
             BuybackPortfolioWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Buy-Back Portfolio")
-        .description("Displays saved assets with live prices and calculated buy-back limits when Finnhub is available.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .description("Displays pinned assets with cached live prices and calculated buy-back limits when Finnhub is available.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
         .contentMarginsDisabled()
         .containerBackgroundRemovable(true)
         .supportedMountingStyles([.elevated, .recessed])
@@ -1735,7 +1798,9 @@ private extension BuybackPortfolioEntry {
                 isBuybackReady: false
             )
         ],
-        hasSavedScenarios: true
+        hasSavedScenarios: true,
+        hasPinnedScenarios: true,
+        pinnedCount: 3
     )
 }
 

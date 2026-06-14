@@ -78,9 +78,9 @@ Instead of a fixed three-row editor, users can add as many tax lots as needed. T
 
 Local alerts can be armed at the calculated buy-back limit or a custom price. They are evaluated when the app refreshes prices, including scenario-dashboard refreshes. The copy makes clear that the app is not running a continuous server-side monitor.
 
-### Widgets that stay useful
+### Pinned assets that stay useful
 
-The Home Screen widget can show a single buy-back calculation or a saved portfolio view. It uses live quote refresh when available, fallback prices when necessary, deep links back into the app, and freeze actions for sell-price tracking.
+Users can pin up to 10 saved scenarios as tracked assets for the portfolio widget. The widget shows current or cached prices, recalculates each buy-back limit from the saved tax model, deep links back into the app, and uses fallback prices when live data is unavailable.
 
 ## Product Tour
 
@@ -108,9 +108,9 @@ When a user sells, they can freeze the sell price so the buy-back limit remains 
 
 Alerts are stored in the shared app group and evaluated locally during app refreshes. Repeated notifications are throttled for six hours per symbol.
 
-### 7. Keep the number visible
+### 7. Pin assets to the widget
 
-Widgets bring the calculation and portfolio readiness state to the Home Screen. They display armed alert targets and status without overstating what a widget can do in the background.
+Pinned assets bring portfolio readiness to the Home Screen. Widget quote refreshes are rate-limit aware, reuse cached prices, and display armed alert targets and status without overstating what a widget can do in the background.
 
 ## Calculation Model
 
@@ -174,7 +174,7 @@ This keeps the app honest: it improves the user's decision without pretending to
 | Refresh All | Saved scenarios can refresh market prices together while keeping fallback clarity. |
 | Freeze workflow | Executed sell prices stay fixed while live quotes track buy-back readiness. |
 | Local alerts | Practical local reminders that are explicit about refresh-based evaluation. |
-| Widget support | Home Screen visibility for a single calculator or a portfolio-style scenario list. |
+| Pinned-asset widgets | Users can pin up to 10 assets; widgets track current or cached prices and recalculate buy-back limits from saved scenario inputs. |
 | API-key management | Runtime keys are accepted, validated, stored securely, and shared with the widget through Keychain entitlements. |
 
 ## Market Data And API Keys
@@ -252,10 +252,13 @@ Single-stock calculator widget:
 Portfolio widget:
 
 1. Save scenarios in the app.
-2. Add the `Buy-Back Portfolio` widget.
-3. Use live quote refresh where available and fallback prices where needed.
-4. Freeze a row after selling to keep the executed sell price fixed.
-5. Open the app to edit the frozen sell price to the exact broker fill.
+2. Pin up to 10 saved scenarios from the result actions or scenario comparison sheet.
+3. Add the `Buy-Back Portfolio` widget.
+4. Use live or cached quote refresh where available and fallback prices where needed.
+5. Freeze a row after selling to keep the executed sell price fixed.
+6. Open the app to edit the frozen sell price to the exact broker fill.
+
+Pinned quote refresh is intentionally local and rate-limit aware. The app and widget share a quote cache, reuse each asset price for at least five minutes, and schedule widget timelines roughly every 15 minutes.
 
 ## Roadmap
 

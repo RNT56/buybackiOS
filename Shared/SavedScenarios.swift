@@ -11,27 +11,92 @@ enum BuybackSharedStorage {
 
 enum SavedScenarioStorage {
     static let storageKey = "buybackCalculator.savedScenarios"
+    static let maximumPinnedScenarios = 10
 
     static func load(userDefaults: UserDefaults = BuybackSharedStorage.userDefaults) -> [SavedBuybackScenario] {
         if let scenarios = decode(from: userDefaults) {
-            return scenarios.sorted { $0.savedAt > $1.savedAt }
+            let normalizedScenarios = normalizedPins(scenarios)
+            if normalizedScenarios != scenarios {
+                save(normalizedScenarios, userDefaults: userDefaults)
+            }
+            return normalizedScenarios.sortedBySavedDate
         }
 
         if userDefaults !== UserDefaults.standard,
            let legacyScenarios = decode(from: .standard) {
-            save(legacyScenarios, userDefaults: userDefaults)
-            return legacyScenarios.sorted { $0.savedAt > $1.savedAt }
+            let normalizedScenarios = normalizedPins(legacyScenarios)
+            save(normalizedScenarios, userDefaults: userDefaults)
+            return normalizedScenarios.sortedBySavedDate
         }
 
         return []
     }
 
     static func save(_ scenarios: [SavedBuybackScenario], userDefaults: UserDefaults = BuybackSharedStorage.userDefaults) {
-        guard let data = try? JSONEncoder().encode(scenarios) else {
+        let normalizedScenarios = normalizedPins(scenarios)
+        guard let data = try? JSONEncoder().encode(normalizedScenarios) else {
             return
         }
 
         userDefaults.set(data, forKey: storageKey)
+    }
+
+    static func pinnedScenarios(from scenarios: [SavedBuybackScenario]) -> [SavedBuybackScenario] {
+        scenarios
+            .filter(\.isPinned)
+            .sorted {
+                let lhsDate = $0.pinnedAt ?? .distantPast
+                let rhsDate = $1.pinnedAt ?? .distantPast
+                if lhsDate == rhsDate {
+                    return $0.savedAt > $1.savedAt
+                }
+                return lhsDate > rhsDate
+            }
+    }
+
+    static func widgetScenarios(from scenarios: [SavedBuybackScenario]) -> [SavedBuybackScenario] {
+        pinnedScenarios(from: scenarios)
+    }
+
+    @discardableResult
+    static func pinScenario(
+        id: UUID,
+        now: Date = .now,
+        userDefaults: UserDefaults = BuybackSharedStorage.userDefaults
+    ) -> Bool {
+        var scenarios = load(userDefaults: userDefaults)
+        guard let index = scenarios.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+
+        if scenarios[index].isPinned {
+            scenarios[index].pinnedAt = now
+            save(scenarios, userDefaults: userDefaults)
+            return true
+        }
+
+        guard pinnedScenarios(from: scenarios).count < maximumPinnedScenarios else {
+            return false
+        }
+
+        scenarios[index].pinnedAt = now
+        save(scenarios, userDefaults: userDefaults)
+        return true
+    }
+
+    @discardableResult
+    static func unpinScenario(
+        id: UUID,
+        userDefaults: UserDefaults = BuybackSharedStorage.userDefaults
+    ) -> Bool {
+        var scenarios = load(userDefaults: userDefaults)
+        guard let index = scenarios.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+
+        scenarios[index].pinnedAt = nil
+        save(scenarios, userDefaults: userDefaults)
+        return true
     }
 
     @discardableResult
@@ -135,6 +200,7 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         case frozenCurrencyCode
         case frozenAt
         case frozenQuoteTimestamp
+        case pinnedAt
     }
 
     var id: UUID
@@ -164,6 +230,7 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
     var frozenCurrencyCode: String?
     var frozenAt: Date?
     var frozenQuoteTimestamp: Date?
+    var pinnedAt: Date?
 
     init(
         id: UUID,
@@ -192,7 +259,8 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         frozenSellPrice: Double? = nil,
         frozenCurrencyCode: String? = nil,
         frozenAt: Date? = nil,
-        frozenQuoteTimestamp: Date? = nil
+        frozenQuoteTimestamp: Date? = nil,
+        pinnedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -221,6 +289,7 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         self.frozenCurrencyCode = frozenCurrencyCode?.normalizedCurrencyCode
         self.frozenAt = frozenAt
         self.frozenQuoteTimestamp = frozenQuoteTimestamp
+        self.pinnedAt = pinnedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -253,6 +322,7 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
         frozenCurrencyCode = try container.decodeIfPresent(String.self, forKey: .frozenCurrencyCode)?.normalizedCurrencyCode
         frozenAt = try container.decodeIfPresent(Date.self, forKey: .frozenAt)
         frozenQuoteTimestamp = try container.decodeIfPresent(Date.self, forKey: .frozenQuoteTimestamp)
+        pinnedAt = try container.decodeIfPresent(Date.self, forKey: .pinnedAt)
     }
 
     var displayTitle: String {
@@ -265,6 +335,10 @@ struct SavedBuybackScenario: Codable, Equatable, Identifiable, Sendable {
 
     var calculation: BuybackCalculation? {
         calculation(using: nil)
+    }
+
+    var isPinned: Bool {
+        pinnedAt != nil
     }
 
     private static func legacyAverageCostBasis(sellPrice: Double, gainPercent: Double) -> Double? {
@@ -287,6 +361,7 @@ final class SavedScenarioStore: ObservableObject {
 
     private let userDefaults: UserDefaults
     private let maximumScenarios = 20
+    private let maximumPinnedScenarios = SavedScenarioStorage.maximumPinnedScenarios
 
     init(userDefaults: UserDefaults = BuybackSharedStorage.userDefaults) {
         self.userDefaults = userDefaults
@@ -300,9 +375,71 @@ final class SavedScenarioStore: ObservableObject {
         persist()
     }
 
+    @discardableResult
+    func savePinned(_ scenario: SavedBuybackScenario) -> Bool {
+        var pinnedScenario = scenario
+        let alreadyPinned = scenarios.contains { $0.id == scenario.id && $0.isPinned }
+        guard alreadyPinned || pinnedCount < maximumPinnedScenarios else {
+            return false
+        }
+
+        pinnedScenario.pinnedAt = pinnedScenario.pinnedAt ?? .now
+        save(pinnedScenario)
+        return true
+    }
+
     func delete(_ scenario: SavedBuybackScenario) {
         scenarios.removeAll { $0.id == scenario.id }
         persist()
+    }
+
+    var pinnedScenarios: [SavedBuybackScenario] {
+        SavedScenarioStorage.pinnedScenarios(from: scenarios)
+    }
+
+    var pinnedCount: Int {
+        pinnedScenarios.count
+    }
+
+    var canPinMore: Bool {
+        pinnedCount < maximumPinnedScenarios
+    }
+
+    @discardableResult
+    func pin(_ scenario: SavedBuybackScenario) -> Bool {
+        guard let index = scenarios.firstIndex(where: { $0.id == scenario.id }) else {
+            return false
+        }
+
+        if scenarios[index].isPinned {
+            scenarios[index].pinnedAt = .now
+            persist()
+            return true
+        }
+
+        guard canPinMore else {
+            return false
+        }
+
+        scenarios[index].pinnedAt = .now
+        persist()
+        return true
+    }
+
+    @discardableResult
+    func unpin(_ scenario: SavedBuybackScenario) -> Bool {
+        guard let index = scenarios.firstIndex(where: { $0.id == scenario.id }) else {
+            return false
+        }
+
+        scenarios[index].pinnedAt = nil
+        persist()
+        return true
+    }
+
+    @discardableResult
+    func togglePin(_ scenario: SavedBuybackScenario) -> Bool {
+        scenario.isPinned ? unpin(scenario) : pin(scenario)
     }
 
     func reload() {
@@ -315,5 +452,32 @@ final class SavedScenarioStore: ObservableObject {
 
     private func persist() {
         SavedScenarioStorage.save(scenarios, userDefaults: userDefaults)
+        scenarios = SavedScenarioStorage.load(userDefaults: userDefaults)
+    }
+}
+
+private extension SavedScenarioStorage {
+    static func normalizedPins(_ scenarios: [SavedBuybackScenario]) -> [SavedBuybackScenario] {
+        let pinned = pinnedScenarios(from: scenarios)
+        guard pinned.count > maximumPinnedScenarios else {
+            return scenarios
+        }
+
+        let allowedPinnedIDs = Set(pinned.prefix(maximumPinnedScenarios).map(\.id))
+        return scenarios.map { scenario in
+            guard scenario.isPinned, !allowedPinnedIDs.contains(scenario.id) else {
+                return scenario
+            }
+
+            var unpinnedScenario = scenario
+            unpinnedScenario.pinnedAt = nil
+            return unpinnedScenario
+        }
+    }
+}
+
+private extension Array where Element == SavedBuybackScenario {
+    var sortedBySavedDate: [SavedBuybackScenario] {
+        sorted { $0.savedAt > $1.savedAt }
     }
 }
