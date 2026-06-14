@@ -132,6 +132,7 @@ struct FreezeScenarioIntent: AppIntent {
             throw FreezeScenarioIntentError.scenarioNotFound
         }
 
+        WidgetSyncStorage.bump(reason: "widget-scenario-frozen")
         WidgetCenter.shared.reloadTimelines(ofKind: BuybackWidgetKind.portfolio)
         return .result()
     }
@@ -139,6 +140,7 @@ struct FreezeScenarioIntent: AppIntent {
 
 struct BuybackEntry: TimelineEntry, Sendable {
     let date: Date
+    let syncSnapshot: WidgetSyncSnapshot
     let query: String
     let symbol: String
     let assetName: String?
@@ -153,6 +155,7 @@ struct BuybackEntry: TimelineEntry, Sendable {
 
 struct BuybackPortfolioEntry: TimelineEntry {
     let date: Date
+    let syncSnapshot: WidgetSyncSnapshot
     let rows: [BuybackPortfolioRow]
     let hasSavedScenarios: Bool
     let hasPinnedScenarios: Bool
@@ -370,6 +373,7 @@ struct BuybackProvider: AppIntentTimelineProvider {
         configuration: BuybackWidgetConfiguration,
         date: Date = .now
     ) async -> BuybackEntry {
+        let syncSnapshot = WidgetSyncStorage.load()
         let query = configuration.symbol.trimmedForDisplay
         let directAsset = fallbackAsset(for: query)
 
@@ -382,7 +386,8 @@ struct BuybackProvider: AppIntentTimelineProvider {
                     query: query,
                     asset: directAsset,
                     quote: quote,
-                    priceStatus: widgetPriceStatus(for: cachedResult.status)
+                    priceStatus: widgetPriceStatus(for: cachedResult.status),
+                    syncSnapshot: syncSnapshot
                 )
             }
 
@@ -390,7 +395,8 @@ struct BuybackProvider: AppIntentTimelineProvider {
                 configuration: configuration,
                 date: date,
                 reason: "Missing API key",
-                asset: directAsset
+                asset: directAsset,
+                syncSnapshot: syncSnapshot
             )
         }
 
@@ -404,14 +410,16 @@ struct BuybackProvider: AppIntentTimelineProvider {
                     query: query,
                     asset: asset,
                     quote: quote,
-                    priceStatus: widgetPriceStatus(for: quoteResult.status)
+                    priceStatus: widgetPriceStatus(for: quoteResult.status),
+                    syncSnapshot: syncSnapshot
                 )
             } else {
                 return makeFallbackEntry(
                     configuration: configuration,
                     date: date,
                     reason: widgetFallbackReason(for: quoteResult.status),
-                    asset: asset
+                    asset: asset,
+                    syncSnapshot: syncSnapshot
                 )
             }
         } catch {
@@ -419,7 +427,8 @@ struct BuybackProvider: AppIntentTimelineProvider {
                 configuration: configuration,
                 date: date,
                 reason: fallbackReason(for: error),
-                asset: directAsset
+                asset: directAsset,
+                syncSnapshot: syncSnapshot
             )
         }
     }
@@ -430,7 +439,8 @@ struct BuybackProvider: AppIntentTimelineProvider {
         query: String,
         asset: MarketAsset,
         quote: MarketQuote,
-        priceStatus: WidgetPriceStatus
+        priceStatus: WidgetPriceStatus,
+        syncSnapshot: WidgetSyncSnapshot = WidgetSyncStorage.load()
     ) -> BuybackEntry {
         let calculation = BuybackCalculator.calculate(
             symbol: asset.symbol,
@@ -450,6 +460,7 @@ struct BuybackProvider: AppIntentTimelineProvider {
 
         return BuybackEntry(
             date: date,
+            syncSnapshot: syncSnapshot,
             query: query,
             symbol: asset.symbol,
             assetName: asset.name,
@@ -467,7 +478,8 @@ struct BuybackProvider: AppIntentTimelineProvider {
         configuration: BuybackWidgetConfiguration,
         date: Date,
         reason: String,
-        asset: MarketAsset? = nil
+        asset: MarketAsset? = nil,
+        syncSnapshot: WidgetSyncSnapshot = WidgetSyncStorage.load()
     ) -> BuybackEntry {
         let query = configuration.symbol.trimmedForDisplay
         let fallbackAsset = asset ?? fallbackAsset(for: query)
@@ -489,6 +501,7 @@ struct BuybackProvider: AppIntentTimelineProvider {
 
         return BuybackEntry(
             date: date,
+            syncSnapshot: syncSnapshot,
             query: query,
             symbol: fallbackAsset.symbol,
             assetName: fallbackAsset.name,
@@ -603,12 +616,14 @@ struct BuybackPortfolioProvider: AppIntentTimelineProvider {
     }
 
     private func makeEntry(for context: Context, date: Date = .now) async -> BuybackPortfolioEntry {
+        let syncSnapshot = WidgetSyncStorage.load()
         let savedScenarios = SavedScenarioStorage.load()
         let pinnedScenarios = SavedScenarioStorage.pinnedScenarios(from: savedScenarios)
         let displayScenarios = SavedScenarioStorage.widgetScenarios(from: savedScenarios)
         guard !savedScenarios.isEmpty else {
             return BuybackPortfolioEntry(
                 date: date,
+                syncSnapshot: syncSnapshot,
                 rows: [],
                 hasSavedScenarios: false,
                 hasPinnedScenarios: false,
@@ -625,6 +640,7 @@ struct BuybackPortfolioProvider: AppIntentTimelineProvider {
 
         return BuybackPortfolioEntry(
             date: date,
+            syncSnapshot: syncSnapshot,
             rows: rows,
             hasSavedScenarios: true,
             hasPinnedScenarios: !pinnedScenarios.isEmpty,
@@ -1651,14 +1667,10 @@ struct BuybackPortfolioWidget: Widget {
     }
 }
 
-private enum BuybackWidgetKind {
-    static let value = "BuybackWidget"
-    static let portfolio = "BuybackPortfolioWidget"
-}
-
 private extension BuybackEntry {
     static let previewLive = BuybackEntry(
         date: .now,
+        syncSnapshot: .preview,
         query: "AAPL",
         symbol: "AAPL",
         assetName: "Apple Inc.",
@@ -1685,6 +1697,7 @@ private extension BuybackEntry {
 
     static let previewFallback = BuybackEntry(
         date: .now,
+        syncSnapshot: .preview,
         query: "AAPL",
         symbol: "AAPL",
         assetName: "Apple Inc.",
@@ -1703,6 +1716,7 @@ private extension BuybackEntry {
 
     static let previewInvalid = BuybackEntry(
         date: .now,
+        syncSnapshot: .preview,
         query: "",
         symbol: "",
         assetName: nil,
@@ -1719,6 +1733,7 @@ private extension BuybackEntry {
 private extension BuybackPortfolioEntry {
     static let preview = BuybackPortfolioEntry(
         date: .now,
+        syncSnapshot: .preview,
         rows: [
             BuybackPortfolioRow(
                 id: UUID(uuidString: "A73406C4-19AB-4CC8-B441-86F780F2C96D") ?? UUID(),

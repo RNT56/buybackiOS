@@ -258,7 +258,7 @@ Portfolio widget:
 5. Freeze a row after selling to keep the executed sell price fixed.
 6. Open the app to edit the frozen sell price to the exact broker fill.
 
-Pinned quote refresh is intentionally local and rate-limit aware. The app and widget share a quote cache, reuse each asset price for at least five minutes, and schedule widget timelines roughly every 15 minutes.
+Pinned quote refresh is intentionally local and rate-limit aware. The app and widget share saved scenarios, alerts, API-key availability, and quote cache through the app group; every app-side scenario, pin, alert, key, freeze, and quote update bumps a shared widget sync revision and requests an immediate WidgetKit timeline reload. iOS can still coalesce the actual repaint, while scheduled widget timelines continue roughly every 15 minutes and each asset quote is reused for at least five minutes.
 
 ## Roadmap
 

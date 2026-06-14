@@ -909,7 +909,7 @@ struct ContentView: View {
                                 await apiKeys.saveAsync()
                                 configureLookupClient()
                                 lookup.scheduleSearch(query: assetQuery)
-                                WidgetCenter.shared.reloadAllTimelines()
+                                syncWidgets(reason: "api-keys-saved")
                             }
                         } label: {
                             LiquidGlassActionIcon(icon: .save, size: 44)
@@ -924,7 +924,7 @@ struct ContentView: View {
                                 await apiKeys.clearAsync()
                                 configureLookupClient()
                                 lookup.scheduleSearch(query: assetQuery)
-                                WidgetCenter.shared.reloadAllTimelines()
+                                syncWidgets(reason: "api-keys-cleared")
                             }
                         } label: {
                             LiquidGlassActionIcon(icon: .clear, tint: LiquidPalette.danger, size: 44)
@@ -1412,6 +1412,7 @@ struct ContentView: View {
                     currencyCode: calculation.currencyCode
                 )
                 evaluateAlert(calculation)
+                syncWidgets(reason: "alert-saved")
             }
 
             iconActionButton(
@@ -1824,7 +1825,7 @@ struct ContentView: View {
                             scenarios.delete(scenario)
                             scenarioQuotes.removeValue(forKey: scenario.id)
                             scenarioMessages.removeValue(forKey: scenario.id)
-                            WidgetCenter.shared.reloadAllTimelines()
+                            syncWidgets(reason: "scenario-deleted")
                             scenarioMessage = .info("Scenario deleted.")
                         }
                     }
@@ -1848,6 +1849,7 @@ struct ContentView: View {
                         currencyCode: calculation.currencyCode
                     )
                     evaluateAlert(calculation)
+                    syncWidgets(reason: "alert-saved")
                 } label: {
                     LiquidGlassActionIcon(icon: .alertArmed, tint: LiquidPalette.muted, size: 40)
                 }
@@ -1871,6 +1873,7 @@ struct ContentView: View {
                             currencyCode: calculation.currencyCode
                         )
                         evaluateAlert(calculation)
+                        syncWidgets(reason: "alert-saved")
                     }
                 } label: {
                     LiquidGlassActionIcon(icon: .selected, size: 44)
@@ -1892,6 +1895,7 @@ struct ContentView: View {
             if alerts.alert(for: calculation.symbol)?.isEnabled == true {
                 Button(role: .destructive) {
                     alerts.disable(symbol: calculation.symbol)
+                    syncWidgets(reason: "alert-disabled")
                 } label: {
                     LiquidGlassActionIcon(icon: .alertOff, tint: LiquidPalette.danger, size: 44)
                         .frame(maxWidth: .infinity)
@@ -1936,7 +1940,7 @@ struct ContentView: View {
             Spacer(minLength: 8)
 
             Button {
-                WidgetCenter.shared.reloadAllTimelines()
+                syncWidgets(reason: "manual-widget-reload")
             } label: {
                 LiquidGlassActionIcon(icon: .refresh, size: 38)
             }
@@ -2109,11 +2113,13 @@ struct ContentView: View {
 
         Task {
             if let quote = await lookup.fetchQuote(for: asset) {
+                MarketQuoteCache.store(quote, for: asset)
                 sellPriceText = quote.price.inputString
                 manualPriceEnabled = false
                 if let calculation {
                     evaluateAlert(calculation)
                 }
+                syncWidgets(reason: "selected-quote-refreshed")
             } else {
                 manualPriceEnabled = true
             }
@@ -2124,11 +2130,13 @@ struct ContentView: View {
         guard let selectedAsset = lookup.selectedAsset else { return }
         Task {
             if let quote = await lookup.fetchQuote(for: selectedAsset) {
+                MarketQuoteCache.store(quote, for: selectedAsset)
                 sellPriceText = quote.price.inputString
                 manualPriceEnabled = false
                 if let calculation {
                     evaluateAlert(calculation)
                 }
+                syncWidgets(reason: "selected-quote-refreshed")
             } else {
                 manualPriceEnabled = true
             }
@@ -2163,6 +2171,12 @@ struct ContentView: View {
         )
     }
 
+    private func syncWidgets(reason: String) {
+        WidgetSyncStorage.bump(reason: reason)
+        WidgetCenter.shared.reloadTimelines(ofKind: BuybackWidgetKind.value)
+        WidgetCenter.shared.reloadTimelines(ofKind: BuybackWidgetKind.portfolio)
+    }
+
     private func scheduleAPIKeyDraftClientRefresh() {
         apiKeyDraftConfigureTask?.cancel()
         guard apiKeys.validationMessage == nil else { return }
@@ -2191,7 +2205,7 @@ struct ContentView: View {
     private func saveScenario(_ calculation: BuybackCalculation) {
         let scenario = makeScenario(calculation)
         scenarios.save(scenario)
-        WidgetCenter.shared.reloadAllTimelines()
+        syncWidgets(reason: "scenario-saved")
         scenarioMessage = .info("Scenario saved.")
     }
 
@@ -2205,7 +2219,7 @@ struct ContentView: View {
             frozenQuoteTimestamp: lookup.quote?.timestamp
         )
         scenarios.save(scenario)
-        WidgetCenter.shared.reloadAllTimelines()
+        syncWidgets(reason: "scenario-frozen")
         scenarioMessage = .info("\(calculation.displaySymbol) frozen at \(calculation.sellPrice.moneyString(currencyCode: calculation.currencyCode)).")
     }
 
@@ -2220,7 +2234,7 @@ struct ContentView: View {
             return
         }
 
-        WidgetCenter.shared.reloadAllTimelines()
+        syncWidgets(reason: "scenario-pinned")
         scenarioMessage = .info("\(calculation.displaySymbol) pinned for the portfolio widget (\(scenarios.pinnedCount)/\(SavedScenarioStorage.maximumPinnedScenarios)).")
     }
 
@@ -2335,6 +2349,7 @@ struct ContentView: View {
                 scenarioRefreshingIDs.removeAll()
                 isRefreshingScenarios = false
                 scenarioMessage = .warning("Live scenario refresh needs a Finnhub API key. Cached quotes are used when available.")
+                syncWidgets(reason: "scenario-quotes-refreshed")
                 return
             }
 
@@ -2345,7 +2360,7 @@ struct ContentView: View {
             scenarioRefreshingIDs.removeAll()
             isRefreshingScenarios = false
             scenarioMessage = .info("Scenario prices refreshed.")
-            WidgetCenter.shared.reloadAllTimelines()
+            syncWidgets(reason: "scenario-quotes-refreshed")
         }
     }
 
@@ -2362,7 +2377,9 @@ struct ContentView: View {
             scenarioMessages[scenario.id] = scenarioMessage(for: result, quote: quote)
 
             if let calculation = scenario.calculation(using: quote) {
-                alerts.evaluate(symbol: calculation.symbol, price: quote.price, calculation: calculation)
+                if alerts.evaluate(symbol: calculation.symbol, price: quote.price, calculation: calculation) {
+                    syncWidgets(reason: "alert-triggered")
+                }
             }
         } else {
             scenarioQuotes.removeValue(forKey: scenario.id)
@@ -2393,7 +2410,7 @@ struct ContentView: View {
             return
         }
 
-        WidgetCenter.shared.reloadAllTimelines()
+        syncWidgets(reason: scenario.isPinned ? "scenario-unpinned" : "scenario-pinned")
         scenarioMessage = scenario.isPinned
             ? .info("\(scenario.displaySymbol) removed from the portfolio widget.")
             : .info("\(scenario.displaySymbol) pinned for the portfolio widget (\(scenarios.pinnedCount)/\(SavedScenarioStorage.maximumPinnedScenarios)).")
@@ -2433,7 +2450,7 @@ struct ContentView: View {
         }
 
         scenarios.reload()
-        WidgetCenter.shared.reloadAllTimelines()
+        syncWidgets(reason: "scenario-freeze-edited")
         scenarioMessage = .info("\(scenario.displaySymbol) frozen at \(price.moneyString(currencyCode: freezeCurrencyCode)).")
         activeSheet = nil
     }
@@ -2445,7 +2462,7 @@ struct ContentView: View {
         }
 
         scenarios.reload()
-        WidgetCenter.shared.reloadAllTimelines()
+        syncWidgets(reason: "scenario-unfrozen")
         scenarioMessage = .info("\(scenario.displaySymbol) is watching live prices again.")
     }
 
@@ -2568,11 +2585,13 @@ struct ContentView: View {
 
     private func evaluateAlert(_ calculation: BuybackCalculation) {
         guard let currentPrice = sellPrice else { return }
-        alerts.evaluate(
+        if alerts.evaluate(
             symbol: calculation.symbol,
             price: currentPrice,
             calculation: calculation
-        )
+        ) {
+            syncWidgets(reason: "alert-triggered")
+        }
     }
 
     private func parsedText(_ text: String) -> String {

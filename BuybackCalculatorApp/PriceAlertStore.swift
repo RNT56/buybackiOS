@@ -51,13 +51,14 @@ final class PriceAlertStore: ObservableObject {
         statusMessage = .info("Alert disabled.")
     }
 
-    func evaluate(symbol: String, price: Double, calculation: BuybackCalculation) {
+    @discardableResult
+    func evaluate(symbol: String, price: Double, calculation: BuybackCalculation) -> Bool {
         guard let index = PriceAlertEvaluator.triggerIndex(
             in: alerts,
             symbol: symbol,
             price: price
         ) else {
-            return
+            return false
         }
 
         alerts[index].lastTriggeredAt = .now
@@ -68,6 +69,7 @@ final class PriceAlertStore: ObservableObject {
             buybackLimit: calculation.maximumBuybackPrice
         )
         statusMessage = .info("Alert triggered for \(alerts[index].symbol).")
+        return true
     }
 
     private func scheduleNotification(alert: PriceAlert, currentPrice: Double, buybackLimit: Double) {

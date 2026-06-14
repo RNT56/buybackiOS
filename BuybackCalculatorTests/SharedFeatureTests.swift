@@ -560,6 +560,37 @@ final class SharedFeatureTests: XCTestCase {
         }
     }
 
+    func testWidgetSyncStorageBumpsRevisionAndPersistsReason() throws {
+        let suiteName = "buybackCalculator.widgetSync.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        XCTAssertEqual(WidgetSyncStorage.load(userDefaults: userDefaults), .initial)
+
+        let firstDate = Date(timeIntervalSince1970: 1_800_000_000)
+        let secondDate = firstDate.addingTimeInterval(60)
+        let first = WidgetSyncStorage.bump(
+            reason: "scenario-pinned",
+            now: firstDate,
+            userDefaults: userDefaults
+        )
+        let second = WidgetSyncStorage.bump(
+            reason: "alert-saved",
+            now: secondDate,
+            userDefaults: userDefaults
+        )
+
+        XCTAssertEqual(first.revision, 1)
+        XCTAssertEqual(first.updatedAt, firstDate)
+        XCTAssertEqual(first.reason, "scenario-pinned")
+        XCTAssertEqual(second.revision, 2)
+        XCTAssertEqual(second.updatedAt, secondDate)
+        XCTAssertEqual(second.reason, "alert-saved")
+        XCTAssertEqual(WidgetSyncStorage.load(userDefaults: userDefaults), second)
+    }
+
     private func makeScenario(
         id: UUID = UUID(),
         symbol: String = "AAPL",
